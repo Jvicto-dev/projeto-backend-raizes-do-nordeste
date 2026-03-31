@@ -1,0 +1,23 @@
+{
+  "name": "projeto-backend-raizes-do-nordeste",
+  "version": "1.0.0",
+  "description": "API REST para a rede \"Raízes do Nordeste\" desenvolvida para o Projeto Multidisciplinar de Back-End da Uninter. Foco em gestão multicanal, estoque por unidade e fluxo crítico de pedidos.",
+  "homepage": "https://github.com/Jvicto-dev/projeto-backend-raizes-do-nordeste#readme",
+  "bugs": {
+    "url": "https://github.com/Jvicto-dev/projeto-backend-raizes-do-nordeste/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Jvicto-dev/projeto-backend-raizes-do-nordeste.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "fastify": "^5.8.4"
+  }
+}
