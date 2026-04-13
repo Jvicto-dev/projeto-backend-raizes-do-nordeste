@@ -16,6 +16,10 @@ export const config: Knex.Config = {
   migrations: {
     extension: 'ts',
     directory: './db/migrations'
+  },
+  seeds: {
+    extension: 'ts',
+    directory: './db/seeds'
   }
 }
 
