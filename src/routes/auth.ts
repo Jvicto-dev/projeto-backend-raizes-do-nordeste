@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 
 import { db } from '../database.js'
+import { invalidCredentialsError, invalidPayloadError } from '../http/errors.js'
 import { verifyPassword } from '../utils/password.js'
 
 export async function authRoutes(app: FastifyInstance) {
@@ -16,10 +17,7 @@ export async function authRoutes(app: FastifyInstance) {
     const parsedBody = bodySchema.safeParse(request.body)
 
     if (!parsedBody.success) {
-      return reply.status(400).send({
-        error: 'DADOS_INVALIDOS',
-        message: 'Email e senha devem ser enviados no formato correto.'
-      })
+      return reply.status(400).send(invalidPayloadError())
     }
 
     const { email, senha } = parsedBody.data
@@ -32,10 +30,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     // Resposta padronizada para não expor se o email existe ou não.
     if (!user || !verifyPassword(senha, user.senha_hash)) {
-      return reply.status(401).send({
-        error: 'CREDENCIAIS_INVALIDAS',
-        message: 'Email ou senha invalidos.'
-      })
+      return reply.status(401).send(invalidCredentialsError())
     }
 
     // O token carrega identificação e perfil para futuras autorizações.
