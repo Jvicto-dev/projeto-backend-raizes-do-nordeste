@@ -45,3 +45,11 @@ export function invalidUserCreationPayloadError(): ErrorResponse {
       'Dados de cadastro invalidos. Verifique nome, email, senha, perfil e data_nascimento.'
   }
 }
+
+export function invalidUserUpdatePayloadError(): ErrorResponse {
+  return {
+    error: 'DADOS_INVALIDOS',
+    message:
+      'Dados de atualizacao invalidos. Envie ao menos um campo valido (nome, email, senha, perfil, data_nascimento).'
+  }
+}
