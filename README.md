@@ -73,6 +73,7 @@ Lá aparecem os endpoints registrados, esquemas e exemplos de request/response.
 | `GET` | `/` | Não | Resposta texto: `Hello World` |
 | `POST` | `/auth/login` | Não | Login com `email` e `senha` (JSON); retorna `accessToken` (Bearer, 1h) e dados básicos do usuário |
 | `GET` | `/hello` | Sim (JWT) | Exemplo de rota protegida |
+| `GET` | `/usuarios` | Sim (JWT, perfil **ADMIN**) | Lista usuários com paginação (`?page=1&limit=10`; padrão page=1, limit=10; máx. limit=100) |
 | `POST` | `/usuarios` | Sim (JWT, perfil **ADMIN**) | Cadastro de usuário (`nome`, `email`, `senha`, `perfil`, `data_nascimento` opcional) |
 | `PUT` | `/usuarios/:id` | Sim (JWT, perfil **ADMIN**) | Atualização parcial; envie ao menos um campo válido |
 | `DELETE` | `/usuarios/:id` | Sim (JWT, perfil **ADMIN**) | Remove usuário; sucesso **204** sem corpo |
@@ -100,6 +101,8 @@ Lá aparecem os endpoints registrados, esquemas e exemplos de request/response.
 ```http
 Authorization: Bearer <accessToken>
 ```
+
+**Listar (`GET /usuarios?page=1&limit=10`):** retorno **200** com `{ data, page, limit, total }`. Cada item em `data` contém `id`, `nome`, `email`, `perfil`, `data_nascimento`, `criado_em` (sem `senha_hash`). Ordenação: `criado_em` decrescente.
 
 **Criar (`POST /usuarios`):** corpo com `nome`, `email`, `senha`, `perfil` (`ADMIN`, `GERENTE`, `CLIENTE`, `COZINHA`, `BALCAO`) e opcionalmente `data_nascimento` (formato data ISO). **201** com dados públicos do usuário criado. **409** se o email já existir.
 

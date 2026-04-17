@@ -8,7 +8,14 @@ import { authRoutes } from './routes/auth.js'
 import { helloRoutes } from './routes/hello.js'
 import { usersRoutes } from './routes/users.js'
 
-export const app = fastify()
+// coerceTypes: querystring vem como string; o Ajv converte para numero nos schemas (integer).
+export const app = fastify({
+  ajv: {
+    customOptions: {
+      coerceTypes: true
+    }
+  }
+})
 
 void app.register(jwt, {
   secret: env.JWT_SECRET

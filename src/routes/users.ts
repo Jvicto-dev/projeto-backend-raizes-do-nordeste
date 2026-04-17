@@ -22,6 +22,103 @@ const errorResponseSchema = {
 } as const
 
 export async function usersRoutes(app: FastifyInstance) {
+  app.get(
+    '/usuarios',
+    {
+      preHandler: [authenticate],
+      attachValidation: true,
+      schema: {
+        tags: ['usuarios'],
+        summary: 'Listar usuarios (somente ADMIN)',
+        description:
+          'Lista usuarios com paginacao simples (page, limit). Requer token JWT com perfil ADMIN.',
+        security: [{ bearerAuth: [] }],
+        querystring: {
+          type: 'object',
+          properties: {
+            page: {
+              type: 'integer',
+              minimum: 1,
+              default: 1,
+              description: 'Numero da pagina (comeca em 1)'
+            },
+            limit: {
+              type: 'integer',
+              minimum: 1,
+              maximum: 100,
+              default: 10,
+              description: 'Quantidade de registros por pagina (maximo 100)'
+            }
+          }
+        },
+        response: {
+          200: {
+            type: 'object',
+            required: ['data', 'page', 'limit', 'total'],
+            properties: {
+              data: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  required: ['id', 'nome', 'email', 'perfil', 'data_nascimento', 'criado_em'],
+                  properties: {
+                    id: { type: 'string', format: 'uuid' },
+                    nome: { type: 'string' },
+                    email: { type: 'string', format: 'email' },
+                    perfil: { type: 'string' },
+                    data_nascimento: { type: ['string', 'null'], format: 'date' },
+                    criado_em: { type: 'string', format: 'date-time' }
+                  }
+                }
+              },
+              page: { type: 'integer' },
+              limit: { type: 'integer' },
+              total: { type: 'integer' }
+            }
+          },
+          400: { description: 'Parametros invalidos', ...errorResponseSchema },
+          401: { description: 'Token invalido/ausente', ...errorResponseSchema },
+          403: { description: 'Perfil sem permissao', ...errorResponseSchema }
+        }
+      }
+    },
+    async (request, reply) => {
+      if (request.validationError) {
+        return reply.status(400).send({
+          error: 'DADOS_INVALIDOS',
+          message:
+            'Parametros de paginacao invalidos. Use page >= 1 e limit entre 1 e 100 (ex.: ?page=1&limit=10).'
+        })
+      }
+
+      const authUser = request.user as { perfil?: string } | undefined
+      if (authUser?.perfil !== 'ADMIN') {
+        return reply.status(403).send(forbiddenError())
+      }
+
+      const q = request.query as { page?: number; limit?: number }
+      const page = typeof q.page === 'number' && q.page >= 1 ? q.page : 1
+      let limit = typeof q.limit === 'number' && q.limit >= 1 ? q.limit : 10
+      if (limit > 100) limit = 100
+      const offset = (page - 1) * limit
+
+      // Obtem total de usuarios.
+      const [countRow] = await db('usuarios').count('* as total')
+      // Converte total para numero e garante valor minimo de 0.
+      const total = Number((countRow as { total: string }).total ?? 0)
+
+      // Obtem usuarios da paginação.
+      const data = await db('usuarios')
+        .select('id', 'nome', 'email', 'perfil', 'data_nascimento', 'criado_em')
+        .orderBy('criado_em', 'desc')
+        .limit(limit)
+        .offset(offset)
+
+      // Retorna usuarios da paginação.
+      return reply.status(200).send({ data, page, limit, total })
+    }
+  )
+
   // Cadastro administrativo de usuários: apenas perfis elevados podem criar contas.
   app.post(
     '/usuarios',
