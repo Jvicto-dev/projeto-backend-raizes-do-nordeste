@@ -125,6 +125,7 @@ export async function usersRoutes(app: FastifyInstance) {
     }
   )
 
+  // Atualizar usuario (somente ADMIN)
   app.put(
     '/usuarios/:id',
     {
@@ -176,6 +177,7 @@ export async function usersRoutes(app: FastifyInstance) {
       }
     },
     async (request, reply) => {
+      // Mantemos a resposta de validação em português e no padrão da API.
       if (request.validationError) {
         return reply.status(400).send({
           error: 'DADOS_INVALIDOS',
@@ -220,6 +222,7 @@ export async function usersRoutes(app: FastifyInstance) {
       const { id } = parsedParams.data
       const { nome, email, senha, perfil, data_nascimento } = parsedBody.data
 
+      // Antes de atualizar, garante que o usuário alvo existe.
       const targetUser = await db('usuarios').where({ id }).first()
       if (!targetUser) {
         return reply.status(404).send({
@@ -229,6 +232,7 @@ export async function usersRoutes(app: FastifyInstance) {
       }
 
       if (email) {
+        // Evita dois usuários distintos com o mesmo email.
         const userWithSameEmail = await db('usuarios')
           .where({ email })
           .whereNot({ id })
@@ -257,6 +261,74 @@ export async function usersRoutes(app: FastifyInstance) {
         .first()
 
       return reply.status(200).send(updatedUser)
+    }
+  )
+
+  // Remover usuario (somente ADMIN)
+  app.delete(
+    '/usuarios/:id',
+    {
+      preHandler: [authenticate],
+      attachValidation: true,
+      schema: {
+        tags: ['usuarios'],
+        summary: 'Remover usuario (somente ADMIN)',
+        description: 'Exclui um usuario pelo id. Requer token JWT com perfil ADMIN.',
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: {
+            id: { type: 'string', format: 'uuid' }
+          }
+        },
+        response: {
+          204: { description: 'Usuario removido' },
+          400: { description: 'Id invalido', ...errorResponseSchema },
+          401: { description: 'Token invalido/ausente', ...errorResponseSchema },
+          403: { description: 'Perfil sem permissao', ...errorResponseSchema },
+          404: { description: 'Usuario nao encontrado', ...errorResponseSchema }
+        }
+      }
+    },
+    async (request, reply) => {
+      // Mesma regra do create/update: apenas ADMIN pode operar usuários.
+      if (request.validationError) {
+        return reply.status(400).send({
+          error: 'DADOS_INVALIDOS',
+          message: 'O id na URL deve ser um UUID valido.'
+        })
+      }
+
+      const authUser = request.user as { perfil?: string } | undefined
+      if (authUser?.perfil !== 'ADMIN') {
+        return reply.status(403).send(forbiddenError())
+      }
+
+      const paramsSchema = z.object({
+        id: z.string().uuid()
+      })
+
+      const parsedParams = paramsSchema.safeParse(request.params)
+      if (!parsedParams.success) {
+        return reply.status(400).send({
+          error: 'DADOS_INVALIDOS',
+          message: 'O id na URL deve ser um UUID valido.'
+        })
+      }
+
+      const { id } = parsedParams.data
+
+      // DELETE retorna quantas linhas foram afetadas.
+      const deleted = await db('usuarios').where({ id }).del()
+      if (deleted === 0) {
+        return reply.status(404).send({
+          error: 'NAO_ENCONTRADO',
+          message: 'Usuario nao encontrado.'
+        })
+      }
+
+      return reply.status(204).send()
     }
   )
 }
