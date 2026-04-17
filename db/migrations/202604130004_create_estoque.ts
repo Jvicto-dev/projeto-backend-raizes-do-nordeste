@@ -19,6 +19,8 @@ export async function up(knex: Knex): Promise<void> {
       .references('id')
       .inTable('produtos')
       .onDelete('CASCADE')
+
+    table.unique(['unidade_id', 'produto_id'])
   })
 }
 
