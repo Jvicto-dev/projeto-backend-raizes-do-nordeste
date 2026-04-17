@@ -17,6 +17,13 @@ export function unauthorizedError(
   }
 }
 
+export function forbiddenError(message = 'Perfil sem permissao para executar esta acao.'): ErrorResponse {
+  return {
+    error: 'ACESSO_NEGADO',
+    message
+  }
+}
+
 export function invalidCredentialsError(): ErrorResponse {
   return {
     error: 'CREDENCIAIS_INVALIDAS',
@@ -28,5 +35,13 @@ export function invalidPayloadError(): ErrorResponse {
   return {
     error: 'DADOS_INVALIDOS',
     message: 'Email e senha devem ser enviados no formato correto.'
+  }
+}
+
+export function invalidUserCreationPayloadError(): ErrorResponse {
+  return {
+    error: 'DADOS_INVALIDOS',
+    message:
+      'Dados de cadastro invalidos. Verifique nome, email, senha, perfil e data_nascimento.'
   }
 }
