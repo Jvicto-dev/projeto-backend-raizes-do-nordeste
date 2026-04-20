@@ -6,6 +6,7 @@ import swaggerUi from '@fastify/swagger-ui'
 import { env } from './env/index.js'
 import { authRoutes } from './routes/auth.js'
 import { helloRoutes } from './routes/hello.js'
+import { unidadesRoutes } from './routes/unidades.js'
 import { usersRoutes } from './routes/users.js'
 
 // coerceTypes: querystring vem como string; o Ajv converte para numero nos schemas (integer).
@@ -33,7 +34,8 @@ void app.register(swagger, {
     tags: [
       { name: 'auth', description: 'Autenticação' },
       { name: 'hello', description: 'Rotas de exemplo' },
-      { name: 'usuarios', description: 'Gestao de usuarios' }
+      { name: 'usuarios', description: 'Gestao de usuarios' },
+      { name: 'unidades', description: 'Unidades da rede' }
     ],
     components: {
       securitySchemes: {
@@ -53,6 +55,7 @@ void app.register(authRoutes, {
 })
 
 void app.register(helloRoutes)
+void app.register(unidadesRoutes)
 void app.register(usersRoutes)
 
 void app.register(swaggerUi, {
