@@ -1,6 +1,6 @@
 # Raízes do Nordeste — API (backend)
 
-API REST em **Node.js** com **Fastify**, **Knex** e **JWT**, desenvolvida no contexto do Projeto Multidisciplinar de Back-End da Uninter. O domínio prevê gestão multicanal, estoque por unidade e fluxo de pedidos. Hoje o código cobre autenticação, **CRUD administrativo de usuários** (criar, atualizar e remover), base de dados (migrations e seed) e documentação OpenAPI.
+API REST em **Node.js** com **Fastify**, **Knex** e **JWT**, desenvolvida no contexto do Projeto Multidisciplinar de Back-End da Uninter. O domínio prevê gestão multicanal, estoque por unidade e fluxo de pedidos. Hoje o código cobre autenticação, **CRUD de usuários** (restrito a **ADMIN** nas operações de escrita), **CRUD de unidades** (leitura para qualquer perfil autenticado; criação, atualização e exclusão só **ADMIN**), base de dados (migrations e seed) e documentação OpenAPI.
 
 ## Requisitos
 
@@ -77,6 +77,11 @@ Lá aparecem os endpoints registrados, esquemas e exemplos de request/response.
 | `POST` | `/usuarios` | Sim (JWT, perfil **ADMIN**) | Cadastro de usuário (`nome`, `email`, `senha`, `perfil`, `data_nascimento` opcional) |
 | `PUT` | `/usuarios/:id` | Sim (JWT, perfil **ADMIN**) | Atualização parcial; envie ao menos um campo válido |
 | `DELETE` | `/usuarios/:id` | Sim (JWT, perfil **ADMIN**) | Remove usuário; sucesso **204** sem corpo |
+| `GET` | `/unidades` | Sim (JWT, qualquer perfil) | Lista unidades com paginação (`?page=1&limit=10`; máx. `limit=100`); filtro opcional `?ativa=true` ou `?ativa=false` |
+| `GET` | `/unidades/:id` | Sim (JWT, qualquer perfil) | Detalhe por UUID |
+| `POST` | `/unidades` | Sim (JWT, perfil **ADMIN**) | Cria unidade (`nome`, `endereco`, `tipo_cozinha`; `ativa` opcional, padrão `true`) |
+| `PUT` | `/unidades/:id` | Sim (JWT, perfil **ADMIN**) | Atualização parcial (`nome`, `endereco`, `tipo_cozinha`, `ativa`) |
+| `DELETE` | `/unidades/:id` | Sim (JWT, perfil **ADMIN**) | Remove unidade; **204**; **409** se existirem pedidos vinculados à unidade |
 
 ### Login (`POST /auth/login`)
 
@@ -110,6 +115,20 @@ Authorization: Bearer <accessToken>
 
 **Remover (`DELETE /usuarios/:id`):** **204** sem corpo em caso de sucesso; **404** se o usuário não existir. Se o banco tiver restrições de integridade (FK) e o registro estiver vinculado a outras tabelas, a exclusão pode falhar no nível do banco.
 
+### Unidades
+
+Todas as rotas exigem JWT. **GET** (listar e buscar por id) aceita qualquer perfil autenticado. **POST**, **PUT** e **DELETE** exigem perfil **ADMIN**.
+
+**Listar (`GET /unidades?page=1&limit=10&ativa=true`):** **200** com `{ data, page, limit, total }`. Cada item tem `id`, `nome`, `endereco`, `tipo_cozinha`, `ativa`. Ordenação por `nome` ascendente.
+
+**Detalhe (`GET /unidades/:id`):** **200** com o objeto da unidade; **404** se não existir.
+
+**Criar (`POST /unidades`):** **201** com a unidade criada.
+
+**Atualizar (`PUT /unidades/:id`):** envie ao menos um campo entre `nome`, `endereco`, `tipo_cozinha`, `ativa`. **404** se não existir.
+
+**Remover (`DELETE /unidades/:id`):** **204** sem corpo; **404** se não existir; **409** se ainda houver registros em `pedidos` apontando para essa unidade (regra alinhada ao `ON DELETE RESTRICT` da migration).
+
 ### Rotas protegidas
 
 Envie o header:
@@ -142,7 +161,7 @@ src/
   server.ts       # Entrada HTTP e rota raiz
   database.ts     # Configuração Knex e instância `db`
   env/            # Validação de variáveis com Zod
-  routes/         # Rotas da API (auth, usuários, hello)
+  routes/         # Rotas da API (auth, usuários, unidades, hello)
   middlewares/    # Ex.: autenticação JWT
   http/           # Contratos de erro da API
   utils/          # Utilitários (senha)
@@ -160,7 +179,8 @@ A organização do código segue ideias alinhadas à **trilha de Node.js da Rock
 
 ## Estado do desenvolvimento
 
-- Autenticação JWT, exemplo de rota protegida e **gestão de usuários** (`POST`, `PUT` e `DELETE` em `/usuarios`, restrita a **ADMIN**).
+- Autenticação JWT, rota de exemplo (`/hello`) e **gestão de usuários** (listagem e CRUD administrativo, operações de escrita restritas a **ADMIN**).
+- **Unidades da rede**: CRUD em `/unidades` (leitura para qualquer usuário autenticado; escrita só **ADMIN**; exclusão bloqueada com **409** quando há pedidos vinculados).
 - Schema amplo definido em migrations; demais domínios (pedidos, estoque operacional, pagamentos, etc.) podem ser expostos em rotas conforme evolução do projeto.
 - Documentação interativa em `/documentation` (OpenAPI/Swagger).
 
