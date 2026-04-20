@@ -53,3 +53,19 @@ export function invalidUserUpdatePayloadError(): ErrorResponse {
       'Dados de atualizacao invalidos. Envie ao menos um campo valido (nome, email, senha, perfil, data_nascimento).'
   }
 }
+
+export function invalidUnidadeCreationPayloadError(): ErrorResponse {
+  return {
+    error: 'DADOS_INVALIDOS',
+    message:
+      'Dados invalidos. Informe nome, endereco e tipo_cozinha; opcionalmente ativa (boolean).'
+  }
+}
+
+export function invalidUnidadeUpdatePayloadError(): ErrorResponse {
+  return {
+    error: 'DADOS_INVALIDOS',
+    message:
+      'Dados de atualizacao invalidos. Envie ao menos um campo valido (nome, endereco, tipo_cozinha, ativa).'
+  }
+}
