@@ -5,6 +5,7 @@ import swaggerUi from '@fastify/swagger-ui'
 
 import { env } from './env/index.js'
 import { authRoutes } from './routes/auth.js'
+import { estoqueRoutes } from './routes/estoque.js'
 import { helloRoutes } from './routes/hello.js'
 import { produtosRoutes } from './routes/produtos.js'
 import { unidadesRoutes } from './routes/unidades.js'
@@ -37,7 +38,8 @@ void app.register(swagger, {
       { name: 'hello', description: 'Rotas de exemplo' },
       { name: 'usuarios', description: 'Gestao de usuarios' },
       { name: 'unidades', description: 'Unidades da rede' },
-      { name: 'produtos', description: 'Produtos do cardapio' }
+      { name: 'produtos', description: 'Produtos do cardapio' },
+      { name: 'estoque', description: 'Estoque por unidade' }
     ],
     components: {
       securitySchemes: {
@@ -59,6 +61,7 @@ void app.register(authRoutes, {
 void app.register(helloRoutes)
 void app.register(unidadesRoutes)
 void app.register(produtosRoutes)
+void app.register(estoqueRoutes)
 void app.register(usersRoutes)
 
 void app.register(swaggerUi, {
