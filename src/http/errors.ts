@@ -69,3 +69,19 @@ export function invalidUnidadeUpdatePayloadError(): ErrorResponse {
       'Dados de atualizacao invalidos. Envie ao menos um campo valido (nome, endereco, tipo_cozinha, ativa).'
   }
 }
+
+export function invalidProdutoCreationPayloadError(): ErrorResponse {
+  return {
+    error: 'DADOS_INVALIDOS',
+    message:
+      'Dados invalidos. Informe nome, preco_base (maior que zero) e categoria; descricao e opcional.'
+  }
+}
+
+export function invalidProdutoUpdatePayloadError(): ErrorResponse {
+  return {
+    error: 'DADOS_INVALIDOS',
+    message:
+      'Dados de atualizacao invalidos. Envie ao menos um campo valido (nome, descricao, preco_base, categoria).'
+  }
+}

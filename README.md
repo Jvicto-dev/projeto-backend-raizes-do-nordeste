@@ -1,6 +1,6 @@
 # Raízes do Nordeste — API (backend)
 
-API REST em **Node.js** com **Fastify**, **Knex** e **JWT**, desenvolvida no contexto do Projeto Multidisciplinar de Back-End da Uninter. O domínio prevê gestão multicanal, estoque por unidade e fluxo de pedidos. Hoje o código cobre autenticação, **CRUD de usuários** (restrito a **ADMIN** nas operações de escrita), **CRUD de unidades** (leitura para qualquer perfil autenticado; criação, atualização e exclusão só **ADMIN**), base de dados (migrations e seed) e documentação OpenAPI.
+API REST em **Node.js** com **Fastify**, **Knex** e **JWT**, desenvolvida no contexto do Projeto Multidisciplinar de Back-End da Uninter. O domínio prevê gestão multicanal, estoque por unidade e fluxo de pedidos. Hoje o código cobre autenticação, **CRUD de usuários** (restrito a **ADMIN** nas operações de escrita), **CRUD de unidades** e **CRUD de produtos** (leitura para qualquer perfil autenticado; criação, atualização e exclusão só **ADMIN**), base de dados (migrations e seed) e documentação OpenAPI.
 
 ## Requisitos
 
@@ -82,6 +82,11 @@ Lá aparecem os endpoints registrados, esquemas e exemplos de request/response.
 | `POST` | `/unidades` | Sim (JWT, perfil **ADMIN**) | Cria unidade (`nome`, `endereco`, `tipo_cozinha`; `ativa` opcional, padrão `true`) |
 | `PUT` | `/unidades/:id` | Sim (JWT, perfil **ADMIN**) | Atualização parcial (`nome`, `endereco`, `tipo_cozinha`, `ativa`) |
 | `DELETE` | `/unidades/:id` | Sim (JWT, perfil **ADMIN**) | Remove unidade; **204**; **409** se existirem pedidos vinculados à unidade |
+| `GET` | `/produtos` | Sim (JWT, qualquer perfil) | Lista produtos com paginação; filtro opcional `?categoria=NomeDaCategoria` (texto exato) |
+| `GET` | `/produtos/:id` | Sim (JWT, qualquer perfil) | Detalhe por UUID |
+| `POST` | `/produtos` | Sim (JWT, perfil **ADMIN**) | Cria produto (`nome`, `preco_base`, `categoria`; `descricao` opcional) |
+| `PUT` | `/produtos/:id` | Sim (JWT, perfil **ADMIN**) | Atualização parcial (`nome`, `descricao`, `preco_base`, `categoria`) |
+| `DELETE` | `/produtos/:id` | Sim (JWT, perfil **ADMIN**) | Remove produto; **204**; **409** se houver itens de pedido ou movimentações de estoque vinculados |
 
 ### Login (`POST /auth/login`)
 
@@ -129,6 +134,20 @@ Todas as rotas exigem JWT. **GET** (listar e buscar por id) aceita qualquer perf
 
 **Remover (`DELETE /unidades/:id`):** **204** sem corpo; **404** se não existir; **409** se ainda houver registros em `pedidos` apontando para essa unidade (regra alinhada ao `ON DELETE RESTRICT` da migration).
 
+### Produtos
+
+Todas as rotas exigem JWT. **GET** (listar e buscar por id) aceita qualquer perfil autenticado. **POST**, **PUT** e **DELETE** exigem perfil **ADMIN**.
+
+**Listar (`GET /produtos?page=1&limit=10&categoria=Bebidas`):** **200** com `{ data, page, limit, total }`. Cada item tem `id`, `nome`, `descricao` (pode ser `null`), `preco_base` (número), `categoria`. Ordenação por `nome` ascendente.
+
+**Detalhe (`GET /produtos/:id`):** **200**; **404** se não existir.
+
+**Criar (`POST /produtos`):** `preco_base` deve ser maior que zero. **201** com o produto criado.
+
+**Atualizar (`PUT /produtos/:id`):** envie ao menos um campo. `descricao` pode ser enviada como `null` para limpar. **404** se não existir.
+
+**Remover (`DELETE /produtos/:id`):** **204**; **404** se não existir; **409** se existirem linhas em `itens_pedido` ou `movimentacoes_estoque` para esse produto (RESTRICT nas migrations). Registros em `estoque` são removidos em cascata ao excluir o produto.
+
 ### Rotas protegidas
 
 Envie o header:
@@ -161,7 +180,7 @@ src/
   server.ts       # Entrada HTTP e rota raiz
   database.ts     # Configuração Knex e instância `db`
   env/            # Validação de variáveis com Zod
-  routes/         # Rotas da API (auth, usuários, unidades, hello)
+  routes/         # Rotas da API (auth, usuários, unidades, produtos, hello)
   middlewares/    # Ex.: autenticação JWT
   http/           # Contratos de erro da API
   utils/          # Utilitários (senha)
@@ -181,6 +200,7 @@ A organização do código segue ideias alinhadas à **trilha de Node.js da Rock
 
 - Autenticação JWT, rota de exemplo (`/hello`) e **gestão de usuários** (listagem e CRUD administrativo, operações de escrita restritas a **ADMIN**).
 - **Unidades da rede**: CRUD em `/unidades` (leitura para qualquer usuário autenticado; escrita só **ADMIN**; exclusão bloqueada com **409** quando há pedidos vinculados).
+- **Produtos do cardápio**: CRUD em `/produtos` (mesmo padrão de permissões; exclusão bloqueada com **409** quando há itens de pedido ou movimentações de estoque vinculados).
 - Schema amplo definido em migrations; demais domínios (pedidos, estoque operacional, pagamentos, etc.) podem ser expostos em rotas conforme evolução do projeto.
 - Documentação interativa em `/documentation` (OpenAPI/Swagger).
 
