@@ -1,6 +1,6 @@
 # Raízes do Nordeste — API (backend)
 
-API REST em **Node.js** com **Fastify**, **Knex** e **JWT**, desenvolvida no contexto do Projeto Multidisciplinar de Back-End da Uninter. O domínio prevê gestão multicanal, estoque por unidade e fluxo de pedidos. Hoje o código cobre autenticação, **CRUD de usuários** (restrito a **ADMIN** nas operações de escrita), **CRUD de unidades** e **CRUD de produtos** (leitura para qualquer perfil autenticado; criação, atualização e exclusão só **ADMIN**), base de dados (migrations e seed) e documentação OpenAPI.
+API REST em **Node.js** com **Fastify**, **Knex** e **JWT**, desenvolvida no contexto do Projeto Multidisciplinar de Back-End da Uninter. O domínio prevê gestão multicanal, estoque por unidade e fluxo de pedidos. Hoje o código cobre autenticação, **CRUD de usuários** (restrito a **ADMIN** nas operações de escrita), **CRUD de unidades**, **CRUD de produtos** e **CRUD de estoque** (leitura para qualquer perfil autenticado; criação, atualização e exclusão só **ADMIN**), base de dados (migrations e seed) e documentação OpenAPI.
 
 ## Requisitos
 
@@ -87,6 +87,11 @@ Lá aparecem os endpoints registrados, esquemas e exemplos de request/response.
 | `POST` | `/produtos` | Sim (JWT, perfil **ADMIN**) | Cria produto (`nome`, `preco_base`, `categoria`; `descricao` opcional) |
 | `PUT` | `/produtos/:id` | Sim (JWT, perfil **ADMIN**) | Atualização parcial (`nome`, `descricao`, `preco_base`, `categoria`) |
 | `DELETE` | `/produtos/:id` | Sim (JWT, perfil **ADMIN**) | Remove produto; **204**; **409** se houver itens de pedido ou movimentações de estoque vinculados |
+| `GET` | `/estoque` | Sim (JWT, qualquer perfil) | Lista itens de estoque com paginação; filtros opcionais `?unidade_id=<uuid>&produto_id=<uuid>` |
+| `GET` | `/estoque/:id` | Sim (JWT, qualquer perfil) | Detalhe por UUID |
+| `POST` | `/estoque` | Sim (JWT, perfil **ADMIN**) | Cria item de estoque (`unidade_id`, `produto_id`; `quantidade_atual`/`ponto_reposicao` opcionais) |
+| `PUT` | `/estoque/:id` | Sim (JWT, perfil **ADMIN**) | Atualiza item (`unidade_id`, `produto_id`, `quantidade_atual`, `ponto_reposicao`) |
+| `DELETE` | `/estoque/:id` | Sim (JWT, perfil **ADMIN**) | Remove item de estoque; **204**; **404** se não existir |
 
 ### Login (`POST /auth/login`)
 
@@ -148,6 +153,20 @@ Todas as rotas exigem JWT. **GET** (listar e buscar por id) aceita qualquer perf
 
 **Remover (`DELETE /produtos/:id`):** **204**; **404** se não existir; **409** se existirem linhas em `itens_pedido` ou `movimentacoes_estoque` para esse produto (RESTRICT nas migrations). Registros em `estoque` são removidos em cascata ao excluir o produto.
 
+### Estoque
+
+Todas as rotas exigem JWT. **GET** (listar e buscar por id) aceita qualquer perfil autenticado. **POST**, **PUT** e **DELETE** exigem perfil **ADMIN**.
+
+**Listar (`GET /estoque?page=1&limit=10&unidade_id=<uuid>&produto_id=<uuid>`):** **200** com `{ data, page, limit, total }`. Cada item tem `id`, `unidade_id`, `produto_id`, `quantidade_atual`, `ponto_reposicao`.
+
+**Detalhe (`GET /estoque/:id`):** **200**; **404** se não existir.
+
+**Criar (`POST /estoque`):** exige `unidade_id` e `produto_id` válidos; `quantidade_atual` e `ponto_reposicao` são inteiros `>= 0` e opcionais (padrão `0`). Retorna **409** se o par `unidade_id + produto_id` já existir.
+
+**Atualizar (`PUT /estoque/:id`):** atualiza parcialmente os campos; valida unidade/produto, garante inteiros `>= 0` e retorna **409** em conflito do par único.
+
+**Remover (`DELETE /estoque/:id`):** **204** no sucesso; **404** se não existir.
+
 ### Rotas protegidas
 
 Envie o header:
@@ -180,7 +199,7 @@ src/
   server.ts       # Entrada HTTP e rota raiz
   database.ts     # Configuração Knex e instância `db`
   env/            # Validação de variáveis com Zod
-  routes/         # Rotas da API (auth, usuários, unidades, produtos, hello)
+  routes/         # Rotas da API (auth, usuários, unidades, produtos, estoque, hello)
   middlewares/    # Ex.: autenticação JWT
   http/           # Contratos de erro da API
   utils/          # Utilitários (senha)
@@ -201,7 +220,8 @@ A organização do código segue ideias alinhadas à **trilha de Node.js da Rock
 - Autenticação JWT, rota de exemplo (`/hello`) e **gestão de usuários** (listagem e CRUD administrativo, operações de escrita restritas a **ADMIN**).
 - **Unidades da rede**: CRUD em `/unidades` (leitura para qualquer usuário autenticado; escrita só **ADMIN**; exclusão bloqueada com **409** quando há pedidos vinculados).
 - **Produtos do cardápio**: CRUD em `/produtos` (mesmo padrão de permissões; exclusão bloqueada com **409** quando há itens de pedido ou movimentações de estoque vinculados).
-- Schema amplo definido em migrations; demais domínios (pedidos, estoque operacional, pagamentos, etc.) podem ser expostos em rotas conforme evolução do projeto.
+- **Estoque por unidade/produto**: CRUD em `/estoque` (par único `unidade_id + produto_id`; validação de unidade/produto existentes; conflito **409** quando o par já existe).
+- Schema amplo definido em migrations; demais domínios (pedidos, pagamento mock, fidelidade etc.) podem ser expostos em rotas conforme evolução do projeto.
 - Documentação interativa em `/documentation` (OpenAPI/Swagger).
 
 ## Licença

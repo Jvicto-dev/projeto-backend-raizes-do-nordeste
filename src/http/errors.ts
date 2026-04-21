@@ -85,3 +85,19 @@ export function invalidProdutoUpdatePayloadError(): ErrorResponse {
       'Dados de atualizacao invalidos. Envie ao menos um campo valido (nome, descricao, preco_base, categoria).'
   }
 }
+
+export function invalidEstoqueCreationPayloadError(): ErrorResponse {
+  return {
+    error: 'DADOS_INVALIDOS',
+    message:
+      'Dados invalidos. Informe unidade_id e produto_id (UUID); quantidade_atual e ponto_reposicao devem ser inteiros >= 0.'
+  }
+}
+
+export function invalidEstoqueUpdatePayloadError(): ErrorResponse {
+  return {
+    error: 'DADOS_INVALIDOS',
+    message:
+      'Dados de atualizacao invalidos. Envie ao menos um campo valido (unidade_id, produto_id, quantidade_atual, ponto_reposicao).'
+  }
+}
