@@ -1,6 +1,6 @@
 # Raízes do Nordeste — API (backend)
 
-API REST em **Node.js** com **Fastify**, **Knex** e **JWT**, desenvolvida no contexto do Projeto Multidisciplinar de Back-End da Uninter. O domínio prevê gestão multicanal, estoque por unidade e fluxo de pedidos. Hoje o código cobre autenticação, **CRUD de usuários** (restrito a **ADMIN** nas operações de escrita), **CRUD de unidades**, **CRUD de produtos** e **CRUD de estoque** (leitura para qualquer perfil autenticado; criação, atualização e exclusão só **ADMIN**), base de dados (migrations e seed) e documentação OpenAPI.
+API REST em **Node.js** com **Fastify**, **Knex** e **JWT**, desenvolvida no contexto do Projeto Multidisciplinar de Back-End da Uninter. O domínio prevê gestão multicanal, estoque por unidade e fluxo de pedidos. Hoje o código cobre autenticação, **CRUD de usuários** (restrito a **ADMIN** nas operações de escrita), **CRUD de unidades**, **CRUD de produtos**, **CRUD de estoque** (leitura para qualquer perfil autenticado; escrita só **ADMIN**) e **pedidos** (criação com `canalPedido`, itens, baixa de estoque; leitura conforme perfil; exclusão de pedido só **ADMIN** em estados limitados), além de migrations, seed e documentação OpenAPI.
 
 ## Requisitos
 
@@ -92,6 +92,11 @@ Lá aparecem os endpoints registrados, esquemas e exemplos de request/response.
 | `POST` | `/estoque` | Sim (JWT, perfil **ADMIN**) | Cria item de estoque (`unidade_id`, `produto_id`; `quantidade_atual`/`ponto_reposicao` opcionais) |
 | `PUT` | `/estoque/:id` | Sim (JWT, perfil **ADMIN**) | Atualiza item (`unidade_id`, `produto_id`, `quantidade_atual`, `ponto_reposicao`) |
 | `DELETE` | `/estoque/:id` | Sim (JWT, perfil **ADMIN**) | Remove item de estoque; **204**; **404** se não existir |
+| `GET` | `/pedidos` | Sim (JWT) | Lista pedidos (CLIENTE só os seus; **ADMIN**/**GERENTE** veem todos); filtros `unidade_id`, `cliente_id`, `canalPedido`, `status` |
+| `GET` | `/pedidos/:id` | Sim (JWT) | Detalhe com itens (CLIENTE só o próprio pedido) |
+| `POST` | `/pedidos` | Sim (JWT) | Cria pedido (`unidade_id`, `canalPedido`, `itens[]`); opcional `cliente_id` só **ADMIN**; baixa estoque; **409** se faltar estoque |
+| `PUT` | `/pedidos/:id` | Sim (JWT) | Atualiza `status` (transições válidas); **CANCELADO** devolve estoque |
+| `DELETE` | `/pedidos/:id` | Sim (JWT, **ADMIN**) | Remove pedido (sem registro em `pagamentos`); **409** se status inválido |
 
 ### Login (`POST /auth/login`)
 
@@ -167,6 +172,16 @@ Todas as rotas exigem JWT. **GET** (listar e buscar por id) aceita qualquer perf
 
 **Remover (`DELETE /estoque/:id`):** **204** no sucesso; **404** se não existir.
 
+### Pedidos
+
+Rotas exigem JWT. **Listagem:** perfil **CLIENTE** vê apenas pedidos em que `cliente_id` é o usuário do token; **ADMIN** e **GERENTE** podem listar todos e filtrar por `cliente_id`, `unidade_id`, `canalPedido`, `status`.
+
+**Criar (`POST /pedidos`):** corpo com `unidade_id`, `canalPedido` (`APP` \| `TOTEM` \| `BALCAO` \| `PICKUP` \| `WEB`) e `itens` (`produto_id`, `quantidade`). O pedido inicia em `AGUARDANDO_PAGAMENTO`, calcula `valor_total` a partir de `produtos.preco_base`, grava `preco_unitario_no_momento` nos itens e **baixa o estoque** da unidade. Exige linha em `estoque` para cada produto; **409** `ESTOQUE_INSUFICIENTE` se não houver quantidade. **ADMIN** pode informar `cliente_id` (outro usuário); demais perfis usam o próprio `sub` do JWT.
+
+**Atualizar status (`PUT /pedidos/:id`):** corpo `{ "status": "..." }`. Transições: `AGUARDANDO_PAGAMENTO` → `EM_PREPARO` \| `CANCELADO`; `EM_PREPARO` → `PRONTO` \| `CANCELADO`; `PRONTO` → `ENTREGUE`. **CANCELADO** devolve quantidades ao estoque. Cancelamento: **CLIENTE** só em `AGUARDANDO_PAGAMENTO`; equipe (**ADMIN**, **GERENTE**, **COZINHA**, **BALCAO**) pode cancelar em `AGUARDANDO_PAGAMENTO` ou `EM_PREPARO`; **ADMIN** pode cancelar nesses estados também.
+
+**Excluir (`DELETE /pedidos/:id`):** somente **ADMIN**; permitido só em `CANCELADO` ou `AGUARDANDO_PAGAMENTO`, sem linha em `pagamentos`. Se excluir em `AGUARDANDO_PAGAMENTO`, o estoque é **restaurado** antes da exclusão.
+
 ### Rotas protegidas
 
 Envie o header:
@@ -199,7 +214,7 @@ src/
   server.ts       # Entrada HTTP e rota raiz
   database.ts     # Configuração Knex e instância `db`
   env/            # Validação de variáveis com Zod
-  routes/         # Rotas da API (auth, usuários, unidades, produtos, estoque, hello)
+  routes/         # Rotas da API (auth, usuários, unidades, produtos, estoque, pedidos, hello)
   middlewares/    # Ex.: autenticação JWT
   http/           # Contratos de erro da API
   utils/          # Utilitários (senha)
@@ -221,7 +236,8 @@ A organização do código segue ideias alinhadas à **trilha de Node.js da Rock
 - **Unidades da rede**: CRUD em `/unidades` (leitura para qualquer usuário autenticado; escrita só **ADMIN**; exclusão bloqueada com **409** quando há pedidos vinculados).
 - **Produtos do cardápio**: CRUD em `/produtos` (mesmo padrão de permissões; exclusão bloqueada com **409** quando há itens de pedido ou movimentações de estoque vinculados).
 - **Estoque por unidade/produto**: CRUD em `/estoque` (par único `unidade_id + produto_id`; validação de unidade/produto existentes; conflito **409** quando o par já existe).
-- Schema amplo definido em migrations; demais domínios (pedidos, pagamento mock, fidelidade etc.) podem ser expostos em rotas conforme evolução do projeto.
+- **Pedidos**: criação com `canalPedido`, itens, cálculo de total, baixa de estoque; atualização de status com cancelamento e devolução ao estoque; exclusão restrita (**ADMIN**).
+- Schema amplo definido em migrations; próximos passos típicos: **pagamento mock**, **fidelidade**, etc.
 - Documentação interativa em `/documentation` (OpenAPI/Swagger).
 
 ## Licença
