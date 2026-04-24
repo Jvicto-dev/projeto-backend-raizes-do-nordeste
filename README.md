@@ -1,6 +1,6 @@
 # Raízes do Nordeste — API (backend)
 
-API REST em **Node.js** com **Fastify**, **Knex** e **JWT**, desenvolvida no contexto do Projeto Multidisciplinar de Back-End da Uninter. O domínio prevê gestão multicanal, estoque por unidade e fluxo de pedidos. Hoje o código cobre autenticação, **CRUD de usuários** (restrito a **ADMIN** nas operações de escrita), **CRUD de unidades**, **CRUD de produtos** e **CRUD de estoque** (leitura para qualquer perfil autenticado; criação, atualização e exclusão só **ADMIN**), base de dados (migrations e seed) e documentação OpenAPI.
+API REST em **Node.js** com **Fastify**, **Knex** e **JWT**, desenvolvida no contexto do Projeto Multidisciplinar de Back-End da Uninter. O domínio prevê gestão multicanal, estoque por unidade e fluxo de pedidos. Hoje o código cobre autenticação, **CRUD de usuários** (restrito a **ADMIN** nas operações de escrita), **CRUD de unidades**, **CRUD de produtos**, **CRUD de estoque** e **CRUD de movimentações de estoque** (leitura para qualquer perfil autenticado; criação, atualização e exclusão só **ADMIN**), base de dados (migrations e seed) e documentação OpenAPI.
 
 ## Requisitos
 
@@ -92,6 +92,11 @@ Lá aparecem os endpoints registrados, esquemas e exemplos de request/response.
 | `POST` | `/estoque` | Sim (JWT, perfil **ADMIN**) | Cria item de estoque (`unidade_id`, `produto_id`; `quantidade_atual`/`ponto_reposicao` opcionais) |
 | `PUT` | `/estoque/:id` | Sim (JWT, perfil **ADMIN**) | Atualiza item (`unidade_id`, `produto_id`, `quantidade_atual`, `ponto_reposicao`) |
 | `DELETE` | `/estoque/:id` | Sim (JWT, perfil **ADMIN**) | Remove item de estoque; **204**; **404** se não existir |
+| `GET` | `/movimentacoes-estoque` | Sim (JWT, qualquer perfil) | Lista movimentações com paginação e filtros por `unidade_id`, `produto_id`, `tipo_movimentacao` |
+| `GET` | `/movimentacoes-estoque/:id` | Sim (JWT, qualquer perfil) | Detalhe por UUID |
+| `POST` | `/movimentacoes-estoque` | Sim (JWT, perfil **ADMIN**) | Cria movimentação ENTRADA/SAIDA e atualiza saldo em `estoque` |
+| `PUT` | `/movimentacoes-estoque/:id` | Sim (JWT, perfil **ADMIN**) | Atualiza movimentação (reverte efeito antigo e aplica novo no saldo) |
+| `DELETE` | `/movimentacoes-estoque/:id` | Sim (JWT, perfil **ADMIN**) | Remove movimentação e reverte impacto no saldo |
 
 ### Login (`POST /auth/login`)
 
@@ -167,6 +172,12 @@ Todas as rotas exigem JWT. **GET** (listar e buscar por id) aceita qualquer perf
 
 **Remover (`DELETE /estoque/:id`):** **204** no sucesso; **404** se não existir.
 
+### Movimentações de estoque
+
+Todas as rotas exigem JWT. **GET** aceita qualquer perfil autenticado. **POST**, **PUT** e **DELETE** exigem perfil **ADMIN**.
+
+As operações de escrita atualizam `estoque.quantidade_atual` em transação: `ENTRADA` soma, `SAIDA` subtrai (com validação de saldo). Em **PUT** e **DELETE**, o efeito anterior da movimentação é revertido antes de aplicar/remover para manter consistência histórica.
+
 ### Rotas protegidas
 
 Envie o header:
@@ -199,7 +210,7 @@ src/
   server.ts       # Entrada HTTP e rota raiz
   database.ts     # Configuração Knex e instância `db`
   env/            # Validação de variáveis com Zod
-  routes/         # Rotas da API (auth, usuários, unidades, produtos, estoque, hello)
+  routes/         # Rotas da API (auth, usuários, unidades, produtos, estoque, movimentações, hello)
   middlewares/    # Ex.: autenticação JWT
   http/           # Contratos de erro da API
   utils/          # Utilitários (senha)
@@ -221,6 +232,7 @@ A organização do código segue ideias alinhadas à **trilha de Node.js da Rock
 - **Unidades da rede**: CRUD em `/unidades` (leitura para qualquer usuário autenticado; escrita só **ADMIN**; exclusão bloqueada com **409** quando há pedidos vinculados).
 - **Produtos do cardápio**: CRUD em `/produtos` (mesmo padrão de permissões; exclusão bloqueada com **409** quando há itens de pedido ou movimentações de estoque vinculados).
 - **Estoque por unidade/produto**: CRUD em `/estoque` (par único `unidade_id + produto_id`; validação de unidade/produto existentes; conflito **409** quando o par já existe).
+- **Movimentações de estoque**: CRUD em `/movimentacoes-estoque` com impacto real no saldo (entrada/saída e reversão em update/delete).
 - Schema amplo definido em migrations; demais domínios (pedidos, pagamento mock, fidelidade etc.) podem ser expostos em rotas conforme evolução do projeto.
 - Documentação interativa em `/documentation` (OpenAPI/Swagger).
 
