@@ -8,6 +8,7 @@ import { authRoutes } from './routes/auth.js'
 import { estoqueRoutes } from './routes/estoque.js'
 import { helloRoutes } from './routes/hello.js'
 import { movimentacoesEstoqueRoutes } from './routes/movimentacoes-estoque.js'
+import { pagamentosRoutes } from './routes/pagamentos.js'
 import { pedidosRoutes } from './routes/pedidos.js'
 import { produtosRoutes } from './routes/produtos.js'
 import { unidadesRoutes } from './routes/unidades.js'
@@ -43,7 +44,8 @@ void app.register(swagger, {
       { name: 'produtos', description: 'Produtos do cardapio' },
       { name: 'estoque', description: 'Estoque por unidade' },
       { name: 'movimentacoes-estoque', description: 'Movimentacoes de estoque' },
-      { name: 'pedidos', description: 'Pedidos e itens' }
+      { name: 'pedidos', description: 'Pedidos e itens' },
+      { name: 'pagamentos', description: 'Pagamentos mock' }
     ],
     components: {
       securitySchemes: {
@@ -68,6 +70,7 @@ void app.register(produtosRoutes)
 void app.register(estoqueRoutes)
 void app.register(movimentacoesEstoqueRoutes)
 void app.register(pedidosRoutes)
+void app.register(pagamentosRoutes)
 void app.register(usersRoutes)
 
 void app.register(swaggerUi, {
