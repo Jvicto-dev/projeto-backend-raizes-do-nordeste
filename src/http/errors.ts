@@ -132,3 +132,19 @@ export function invalidPedidoUpdatePayloadError(): ErrorResponse {
     message: 'Informe status valido (AGUARDANDO_PAGAMENTO|EM_PREPARO|PRONTO|ENTREGUE|CANCELADO).'
   }
 }
+
+export function invalidPagamentoCreationPayloadError(): ErrorResponse {
+  return {
+    error: 'DADOS_INVALIDOS',
+    message:
+      'Dados invalidos. Informe pedido_id, metodo_pagamento e resultado_mock (APROVADO|NEGADO); external_id e payload_retorno sao opcionais.'
+  }
+}
+
+export function invalidPagamentoUpdatePayloadError(): ErrorResponse {
+  return {
+    error: 'DADOS_INVALIDOS',
+    message:
+      'Dados de atualizacao invalidos. Envie ao menos um campo valido (metodo_pagamento, external_id, payload_retorno).'
+  }
+}

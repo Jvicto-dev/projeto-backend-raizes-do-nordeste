@@ -1,7 +1,6 @@
 # Raízes do Nordeste — API (backend)
 
-API REST em **Node.js** com **Fastify**, **Knex** e **JWT**, desenvolvida no contexto do Projeto Multidisciplinar de Back-End da Uninter. O domínio prevê gestão multicanal, estoque por unidade e fluxo de pedidos. Hoje o código cobre autenticação, **CRUD de usuários** (restrito a **ADMIN** nas operações de escrita), **CRUD de unidades**, **CRUD de produtos**, **CRUD de estoque** e **CRUD de movimentações de estoque** (leitura para qualquer perfil autenticado; criação, atualização e exclusão só **ADMIN**), base de dados (migrations e seed) e documentação OpenAPI.
-API REST em **Node.js** com **Fastify**, **Knex** e **JWT**, desenvolvida no contexto do Projeto Multidisciplinar de Back-End da Uninter. O domínio prevê gestão multicanal, estoque por unidade e fluxo de pedidos. Hoje o código cobre autenticação, **CRUD de usuários** (restrito a **ADMIN** nas operações de escrita), **CRUD de unidades**, **CRUD de produtos**, **CRUD de estoque** (leitura para qualquer perfil autenticado; escrita só **ADMIN**) e **pedidos** (criação com `canalPedido`, itens, baixa de estoque; leitura conforme perfil; exclusão de pedido só **ADMIN** em estados limitados), além de migrations, seed e documentação OpenAPI.
+API REST em **Node.js** com **Fastify**, **Knex** e **JWT**, desenvolvida no contexto do Projeto Multidisciplinar de Back-End da Uninter. O domínio prevê gestão multicanal, estoque por unidade e fluxo de pedidos. Hoje o código cobre autenticação, **CRUD de usuários** (restrito a **ADMIN** nas operações de escrita), **CRUD de unidades**, **CRUD de produtos**, **CRUD de estoque**, **CRUD de movimentações de estoque**, **pedidos** e **pagamentos mock** integrados ao pedido, além de migrations, seed e documentação OpenAPI.
 
 ## Requisitos
 
@@ -103,6 +102,11 @@ Lá aparecem os endpoints registrados, esquemas e exemplos de request/response.
 | `POST` | `/pedidos` | Sim (JWT) | Cria pedido (`unidade_id`, `canalPedido`, `itens[]`); opcional `cliente_id` só **ADMIN**; baixa estoque; **409** se faltar estoque |
 | `PUT` | `/pedidos/:id` | Sim (JWT) | Atualiza `status` (transições válidas); **CANCELADO** devolve estoque |
 | `DELETE` | `/pedidos/:id` | Sim (JWT, **ADMIN**) | Remove pedido (sem registro em `pagamentos`); **409** se status inválido |
+| `GET` | `/pagamentos` | Sim (JWT) | Lista pagamentos (ADMIN/GERENTE veem todos; demais perfis veem pagamentos dos próprios pedidos) |
+| `GET` | `/pagamentos/:id` | Sim (JWT) | Detalhe de pagamento com controle por dono do pedido |
+| `POST` | `/pagamentos` | Sim (JWT) | Registra pagamento mock (`APROVADO`/`NEGADO`) para pedido em `AGUARDANDO_PAGAMENTO` |
+| `PUT` | `/pagamentos/:id` | Sim (JWT, perfis operacionais) | Atualiza metadados (`metodo_pagamento`, `external_id`, `payload_retorno`) |
+| `DELETE` | `/pagamentos/:id` | Sim (JWT, **ADMIN**) | Remove pagamento NEGADO (APROVADO não pode ser removido) |
 
 ### Login (`POST /auth/login`)
 
@@ -193,6 +197,17 @@ Rotas exigem JWT. **Listagem:** perfil **CLIENTE** vê apenas pedidos em que `cl
 
 **Excluir (`DELETE /pedidos/:id`):** somente **ADMIN**; permitido só em `CANCELADO` ou `AGUARDANDO_PAGAMENTO`, sem linha em `pagamentos`. Se excluir em `AGUARDANDO_PAGAMENTO`, o estoque é **restaurado** antes da exclusão.
 
+### Pagamentos (mock)
+
+`POST /pagamentos` fecha o fluxo do pedido:
+- `APROVADO`: pedido vai para `EM_PREPARO`;
+- `NEGADO`: pedido vai para `CANCELADO` e o estoque e restaurado.
+
+Regras:
+- so aceita pagamento para pedido em `AGUARDANDO_PAGAMENTO`;
+- cada pedido aceita apenas um pagamento (`pedido_id` unico em `pagamentos`);
+- leitura respeita dono do pedido para perfis comuns.
+
 ### Rotas protegidas
 
 Envie o header:
@@ -225,8 +240,7 @@ src/
   server.ts       # Entrada HTTP e rota raiz
   database.ts     # Configuração Knex e instância `db`
   env/            # Validação de variáveis com Zod
-  routes/         # Rotas da API (auth, usuários, unidades, produtos, estoque, movimentações, hello)
-  routes/         # Rotas da API (auth, usuários, unidades, produtos, estoque, pedidos, hello)
+  routes/         # Rotas da API (auth, usuários, unidades, produtos, estoque, movimentações, pedidos, pagamentos, hello)
   middlewares/    # Ex.: autenticação JWT
   http/           # Contratos de erro da API
   utils/          # Utilitários (senha)
@@ -249,9 +263,9 @@ A organização do código segue ideias alinhadas à **trilha de Node.js da Rock
 - **Produtos do cardápio**: CRUD em `/produtos` (mesmo padrão de permissões; exclusão bloqueada com **409** quando há itens de pedido ou movimentações de estoque vinculados).
 - **Estoque por unidade/produto**: CRUD em `/estoque` (par único `unidade_id + produto_id`; validação de unidade/produto existentes; conflito **409** quando o par já existe).
 - **Movimentações de estoque**: CRUD em `/movimentacoes-estoque` com impacto real no saldo (entrada/saída e reversão em update/delete).
-- Schema amplo definido em migrations; demais domínios (pedidos, pagamento mock, fidelidade etc.) podem ser expostos em rotas conforme evolução do projeto.
 - **Pedidos**: criação com `canalPedido`, itens, cálculo de total, baixa de estoque; atualização de status com cancelamento e devolução ao estoque; exclusão restrita (**ADMIN**).
-- Schema amplo definido em migrations; próximos passos típicos: **pagamento mock**, **fidelidade**, etc.
+- **Pagamentos mock**: integração com pedidos (`APROVADO` avança para `EM_PREPARO`; `NEGADO` cancela e devolve estoque).
+- Schema amplo definido em migrations; próximos passos típicos: **fidelidade** e **logs/auditoria**.
 - Documentação interativa em `/documentation` (OpenAPI/Swagger).
 
 ## Licença
