@@ -1,6 +1,6 @@
 # Raízes do Nordeste — API (backend)
 
-API REST em **Node.js** com **Fastify**, **Knex** e **JWT**, desenvolvida no contexto do Projeto Multidisciplinar de Back-End da Uninter. O domínio prevê gestão multicanal, estoque por unidade e fluxo de pedidos. Hoje o código cobre autenticação, **CRUD de usuários** (restrito a **ADMIN** nas operações de escrita), **CRUD de unidades**, **CRUD de produtos**, **CRUD de estoque**, **CRUD de movimentações de estoque**, **pedidos** e **pagamentos mock** integrados ao pedido, além de migrations, seed e documentação OpenAPI.
+API REST em **Node.js** com **Fastify**, **Knex** e **JWT**, desenvolvida no contexto do Projeto Multidisciplinar de Back-End da Uninter. O domínio prevê gestão multicanal, estoque por unidade e fluxo de pedidos. Hoje o código cobre autenticação, **CRUD de usuários** (restrito a **ADMIN** nas operações de escrita), **CRUD de unidades**, **CRUD de produtos**, **CRUD de estoque**, **CRUD de movimentações de estoque**, **pedidos**, **pagamentos mock** e **fidelidade**, além de migrations, seed e documentação OpenAPI.
 
 ## Requisitos
 
@@ -107,6 +107,11 @@ Lá aparecem os endpoints registrados, esquemas e exemplos de request/response.
 | `POST` | `/pagamentos` | Sim (JWT) | Registra pagamento mock (`APROVADO`/`NEGADO`) para pedido em `AGUARDANDO_PAGAMENTO` |
 | `PUT` | `/pagamentos/:id` | Sim (JWT, perfis operacionais) | Atualiza metadados (`metodo_pagamento`, `external_id`, `payload_retorno`) |
 | `DELETE` | `/pagamentos/:id` | Sim (JWT, **ADMIN**) | Remove pagamento NEGADO (APROVADO não pode ser removido) |
+| `GET` | `/fidelidade` | Sim (JWT) | Lista registros (ADMIN/GERENTE veem todos; CLIENTE vê apenas o próprio) |
+| `GET` | `/fidelidade/:id` | Sim (JWT) | Detalhe por id com controle de acesso |
+| `POST` | `/fidelidade` | Sim (JWT, **ADMIN/GERENTE**) | Cria cadastro de fidelidade para cliente |
+| `PUT` | `/fidelidade/:id` | Sim (JWT, **ADMIN/GERENTE**) | Atualiza saldo/consentimento (`ajuste_pontos_delta` para crédito/débito) |
+| `DELETE` | `/fidelidade/:id` | Sim (JWT, **ADMIN**) | Remove cadastro de fidelidade |
 
 ### Login (`POST /auth/login`)
 
@@ -208,6 +213,21 @@ Regras:
 - cada pedido aceita apenas um pagamento (`pedido_id` unico em `pagamentos`);
 - leitura respeita dono do pedido para perfis comuns.
 
+### Fidelidade
+
+Permissoes:
+- **ADMIN/GERENTE**: criam e atualizam registro de fidelidade;
+- **ADMIN**: pode remover;
+- **CLIENTE**: visualiza apenas o proprio registro.
+
+Campos principais:
+- `saldo_pontos` (inteiro, nao negativo);
+- `consentimento_explicitado` (LGPD);
+- `data_consentimento`;
+- `ultima_atualizacao`.
+
+No `PUT /fidelidade/:id`, use `ajuste_pontos_delta` para creditar/debitar pontos sem sobrescrever manualmente o saldo.
+
 ### Rotas protegidas
 
 Envie o header:
@@ -240,7 +260,7 @@ src/
   server.ts       # Entrada HTTP e rota raiz
   database.ts     # Configuração Knex e instância `db`
   env/            # Validação de variáveis com Zod
-  routes/         # Rotas da API (auth, usuários, unidades, produtos, estoque, movimentações, pedidos, pagamentos, hello)
+  routes/         # Rotas da API (auth, usuários, unidades, produtos, estoque, movimentações, pedidos, pagamentos, fidelidade, hello)
   middlewares/    # Ex.: autenticação JWT
   http/           # Contratos de erro da API
   utils/          # Utilitários (senha)
@@ -265,7 +285,8 @@ A organização do código segue ideias alinhadas à **trilha de Node.js da Rock
 - **Movimentações de estoque**: CRUD em `/movimentacoes-estoque` com impacto real no saldo (entrada/saída e reversão em update/delete).
 - **Pedidos**: criação com `canalPedido`, itens, cálculo de total, baixa de estoque; atualização de status com cancelamento e devolução ao estoque; exclusão restrita (**ADMIN**).
 - **Pagamentos mock**: integração com pedidos (`APROVADO` avança para `EM_PREPARO`; `NEGADO` cancela e devolve estoque).
-- Schema amplo definido em migrations; próximos passos típicos: **fidelidade** e **logs/auditoria**.
+- **Fidelidade**: cadastro por cliente com saldo de pontos, consentimento LGPD e atualização por delta de pontos.
+- Schema amplo definido em migrations; próximo passo típico: **logs/auditoria**.
 - Documentação interativa em `/documentation` (OpenAPI/Swagger).
 
 ## Licença

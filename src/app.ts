@@ -6,6 +6,7 @@ import swaggerUi from '@fastify/swagger-ui'
 import { env } from './env/index.js'
 import { authRoutes } from './routes/auth.js'
 import { estoqueRoutes } from './routes/estoque.js'
+import { fidelidadeRoutes } from './routes/fidelidade.js'
 import { helloRoutes } from './routes/hello.js'
 import { movimentacoesEstoqueRoutes } from './routes/movimentacoes-estoque.js'
 import { pagamentosRoutes } from './routes/pagamentos.js'
@@ -45,7 +46,8 @@ void app.register(swagger, {
       { name: 'estoque', description: 'Estoque por unidade' },
       { name: 'movimentacoes-estoque', description: 'Movimentacoes de estoque' },
       { name: 'pedidos', description: 'Pedidos e itens' },
-      { name: 'pagamentos', description: 'Pagamentos mock' }
+      { name: 'pagamentos', description: 'Pagamentos mock' },
+      { name: 'fidelidade', description: 'Programa de fidelidade' }
     ],
     components: {
       securitySchemes: {
@@ -68,6 +70,7 @@ void app.register(helloRoutes)
 void app.register(unidadesRoutes)
 void app.register(produtosRoutes)
 void app.register(estoqueRoutes)
+void app.register(fidelidadeRoutes)
 void app.register(movimentacoesEstoqueRoutes)
 void app.register(pedidosRoutes)
 void app.register(pagamentosRoutes)
