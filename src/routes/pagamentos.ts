@@ -4,7 +4,13 @@ import type { Knex } from 'knex'
 import { z } from 'zod'
 
 import { db } from '../database.js'
-import { forbiddenError } from '../http/errors.js'
+import {
+  forbiddenError,
+  invalidPagamentoCreationPayloadError,
+  invalidPagamentoUpdatePayloadError,
+  pagamentoJaRegistradoError,
+  pagamentoPedidoStatusInvalidoError
+} from '../http/errors.js'
 import { authenticate } from '../middlewares/authenticate.js'
 import { AcaoAuditoria, getUsuarioIdFromRequest, registrarLogAuditoria } from '../services/audit-log.js'
 
@@ -16,22 +22,6 @@ const errorResponseSchema = {
   },
   required: ['error', 'message']
 } as const
-
-function invalidPagamentoCreationPayloadError() {
-  return {
-    error: 'DADOS_INVALIDOS',
-    message:
-      'Dados invalidos. Informe pedido_id, metodo_pagamento e resultado_mock (APROVADO|NEGADO); external_id e payload_retorno sao opcionais.'
-  }
-}
-
-function invalidPagamentoUpdatePayloadError() {
-  return {
-    error: 'DADOS_INVALIDOS',
-    message:
-      'Dados de atualizacao invalidos. Envie ao menos um campo valido (metodo_pagamento, external_id, payload_retorno).'
-  }
-}
 
 const RESULTADOS = ['APROVADO', 'NEGADO'] as const
 type ResultadoPagamento = (typeof RESULTADOS)[number]
@@ -46,6 +36,42 @@ const pagamentoResponseProps = {
     metodo_pagamento: { type: 'string' },
     status_pagamento: { type: 'string', enum: [...RESULTADOS] },
     payload_retorno: { type: ['string', 'null'] }
+  }
+} as const
+
+/** Mesmo formato resumido de pedido usado em `GET /pedidos` (alistagem/detalhe sem itens). */
+const pedidoResumoPagamentoProps = {
+  type: 'object',
+  required: [
+    'id',
+    'cliente_id',
+    'unidade_id',
+    'canalPedido',
+    'status',
+    'valor_total',
+    'valor_desconto',
+    'campanha_id',
+    'criado_em'
+  ],
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    cliente_id: { type: 'string', format: 'uuid' },
+    unidade_id: { type: 'string', format: 'uuid' },
+    canalPedido: { type: 'string' },
+    status: { type: 'string' },
+    valor_total: { type: 'number' },
+    valor_desconto: { type: 'number' },
+    campanha_id: { type: ['string', 'null'], format: 'uuid' },
+    criado_em: { type: 'string', format: 'date-time' }
+  }
+} as const
+
+const pagamentoCreate201ResponseProps = {
+  type: 'object',
+  required: ['pagamento', 'pedido'],
+  properties: {
+    pagamento: pagamentoResponseProps,
+    pedido: pedidoResumoPagamentoProps
   }
 } as const
 
@@ -76,6 +102,23 @@ function serializePagamento(row: Record<string, unknown>) {
     metodo_pagamento: row.metodo_pagamento,
     status_pagamento: row.status_pagamento,
     payload_retorno: row.payload_retorno ?? null
+  }
+}
+
+function serializePedidoResumo(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    cliente_id: row.cliente_id,
+    unidade_id: row.unidade_id,
+    canalPedido: row.canalPedido,
+    status: row.status,
+    valor_total: Number(row.valor_total),
+    valor_desconto: Number(row.valor_desconto ?? 0),
+    campanha_id: row.campanha_id != null ? String(row.campanha_id) : null,
+    criado_em:
+      row.criado_em instanceof Date
+        ? row.criado_em.toISOString()
+        : String(row.criado_em)
   }
 }
 
@@ -275,7 +318,7 @@ export async function pagamentosRoutes(app: FastifyInstance) {
         tags: ['pagamentos'],
         summary: 'Registrar pagamento mock',
         description:
-          'Registra pagamento (APROVADO/NEGADO) para pedido em `AGUARDANDO_PAGAMENTO`. Quem pode: **dono do pedido** (cliente) **ou** perfis **ADMIN**, **GERENTE**, **BALCAO**. APROVADO → `EM_PREPARO`; NEGADO → cancela e devolve estoque.',
+          'Registra pagamento (APROVADO/NEGADO) para pedido em `AGUARDANDO_PAGAMENTO`. Quem pode: **dono do pedido** (cliente) **ou** perfis **ADMIN**, **GERENTE**, **BALCAO**. APROVADO → `EM_PREPARO`; NEGADO → cancela e devolve estoque. **Resposta 201:** objeto com `pagamento` (registro criado) e `pedido` (estado atual — ex.: `EM_PREPARO` ou `CANCELADO`), no mesmo formato resumido da listagem de pedidos.',
         security: [{ bearerAuth: [] }],
         body: {
           type: 'object',
@@ -289,12 +332,17 @@ export async function pagamentosRoutes(app: FastifyInstance) {
           }
         },
         response: {
-          201: pagamentoResponseProps,
+          201: pagamentoCreate201ResponseProps,
           400: { description: 'Payload invalido', ...errorResponseSchema },
           401: { description: 'Token invalido/ausente', ...errorResponseSchema },
           403: { description: 'Sem permissao', ...errorResponseSchema },
           404: { description: 'Pedido nao encontrado', ...errorResponseSchema },
-          409: { description: 'Conflito de status/pagamento', ...errorResponseSchema }
+          409: {
+            description:
+              '`PEDIDO_STATUS_INVALIDO`: pedido nao esta em AGUARDANDO_PAGAMENTO (T12). `PAGAMENTO_JA_REGISTRADO`: pedido ja tem pagamento.',
+            ...errorResponseSchema
+          },
+          500: { description: 'Inconsistencia apos persistencia', ...errorResponseSchema }
         }
       }
     },
@@ -330,19 +378,14 @@ export async function pagamentosRoutes(app: FastifyInstance) {
         return reply.status(403).send(forbiddenError())
       }
 
-      if (String((pedido as { status: string }).status) !== 'AGUARDANDO_PAGAMENTO') {
-        return reply.status(409).send({
-          error: 'CONFLITO',
-          message: 'Pagamento so pode ser registrado para pedido em AGUARDANDO_PAGAMENTO.'
-        })
+      const statusPedido = String((pedido as { status: string }).status)
+      if (statusPedido !== 'AGUARDANDO_PAGAMENTO') {
+        return reply.status(409).send(pagamentoPedidoStatusInvalidoError(statusPedido))
       }
 
       const existing = await db('pagamentos').where({ pedido_id: pb.data.pedido_id }).first()
       if (existing) {
-        return reply.status(409).send({
-          error: 'CONFLITO',
-          message: 'Este pedido ja possui pagamento registrado.'
-        })
+        return reply.status(409).send(pagamentoJaRegistradoError())
       }
 
       const pagamentoId = randomUUID()
@@ -403,7 +446,18 @@ export async function pagamentosRoutes(app: FastifyInstance) {
         })
       }
 
-      return reply.status(201).send(serializePagamento(resultado))
+      const pedidoAtualizado = await db('pedidos').where({ id: pb.data.pedido_id }).first()
+      if (!pedidoAtualizado) {
+        return reply.status(500).send({
+          error: 'ERRO_INTERNO',
+          message: 'Pagamento registrado mas pedido nao encontrado apos atualizacao.'
+        })
+      }
+
+      return reply.status(201).send({
+        pagamento: serializePagamento(resultado),
+        pedido: serializePedidoResumo(pedidoAtualizado as Record<string, unknown>)
+      })
     }
   )
 

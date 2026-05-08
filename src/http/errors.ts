@@ -141,6 +141,22 @@ export function invalidPagamentoCreationPayloadError(): ErrorResponse {
   }
 }
 
+/** Pedido nao esta em AGUARDANDO_PAGAMENTO — POST /pagamentos deve receber 409 (ex.: cenario T12). */
+export function pagamentoPedidoStatusInvalidoError(statusAtual: string): ErrorResponse {
+  return {
+    error: 'PEDIDO_STATUS_INVALIDO',
+    message: `Pagamento so pode ser registrado para pedido em AGUARDANDO_PAGAMENTO. Status atual: ${statusAtual}.`
+  }
+}
+
+/** Ja existe linha em `pagamentos` para o pedido. */
+export function pagamentoJaRegistradoError(): ErrorResponse {
+  return {
+    error: 'PAGAMENTO_JA_REGISTRADO',
+    message: 'Este pedido ja possui pagamento registrado.'
+  }
+}
+
 export function invalidPagamentoUpdatePayloadError(): ErrorResponse {
   return {
     error: 'DADOS_INVALIDOS',
