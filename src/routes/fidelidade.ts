@@ -9,6 +9,7 @@ import {
   invalidFidelidadeUpdatePayloadError
 } from '../http/errors.js'
 import { authenticate } from '../middlewares/authenticate.js'
+import { AcaoAuditoria, getUsuarioIdFromRequest, registrarLogAuditoria } from '../services/audit-log.js'
 
 const errorResponseSchema = {
   type: 'object',
@@ -314,6 +315,17 @@ export async function fidelidadeRoutes(app: FastifyInstance) {
       })
 
       const created = await db('fidelidade').where({ id }).first()
+
+      const actorFid = getUsuarioIdFromRequest(request)
+      if (actorFid) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorFid,
+          acao: AcaoAuditoria.FIDELIDADE_CREATE,
+          detalhes: JSON.stringify({ fidelidade_id: id, cliente_id: pb.data.cliente_id }),
+          ipOrigem: request.ip
+        })
+      }
+
       return reply.status(201).send(serializeFidelidade(created as Record<string, unknown>))
     }
   )
@@ -426,6 +438,17 @@ export async function fidelidadeRoutes(app: FastifyInstance) {
 
       await db('fidelidade').where({ id: pp.data.id }).update(patch)
       const updated = await db('fidelidade').where({ id: pp.data.id }).first()
+
+      const actorFidPut = getUsuarioIdFromRequest(request)
+      if (actorFidPut) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorFidPut,
+          acao: AcaoAuditoria.FIDELIDADE_UPDATE,
+          detalhes: JSON.stringify({ fidelidade_id: pp.data.id, campos: Object.keys(patch) }),
+          ipOrigem: request.ip
+        })
+      }
+
       return reply.status(200).send(serializeFidelidade(updated as Record<string, unknown>))
     }
   )
@@ -472,6 +495,17 @@ export async function fidelidadeRoutes(app: FastifyInstance) {
       if (deleted === 0) {
         return reply.status(404).send({ error: 'NAO_ENCONTRADO', message: 'Fidelidade nao encontrada.' })
       }
+
+      const actorFidDel = getUsuarioIdFromRequest(request)
+      if (actorFidDel) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorFidDel,
+          acao: AcaoAuditoria.FIDELIDADE_DELETE,
+          detalhes: JSON.stringify({ fidelidade_id: pp.data.id }),
+          ipOrigem: request.ip
+        })
+      }
+
       return reply.status(204).send()
     }
   )

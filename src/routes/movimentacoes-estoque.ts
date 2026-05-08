@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { db } from '../database.js'
 import { forbiddenError } from '../http/errors.js'
 import { authenticate } from '../middlewares/authenticate.js'
+import { AcaoAuditoria, getUsuarioIdFromRequest, registrarLogAuditoria } from '../services/audit-log.js'
 
 const errorResponseSchema = {
   type: 'object',
@@ -382,6 +383,19 @@ export async function movimentacoesEstoqueRoutes(app: FastifyInstance) {
         return { status: 201 as const, body: serializeMovimentacao(created as Record<string, unknown>) }
       })
 
+      if (result.status === 201) {
+        const uid = getUsuarioIdFromRequest(request)
+        const row = result.body as { id: string }
+        if (uid && row?.id) {
+          await registrarLogAuditoria(request.log, {
+            usuarioId: uid,
+            acao: AcaoAuditoria.MOVIMENTACAO_ESTOQUE_CREATE,
+            detalhes: JSON.stringify({ movimentacao_id: row.id }),
+            ipOrigem: request.ip
+          })
+        }
+      }
+
       return reply.status(result.status).send(result.body)
     }
   )
@@ -527,6 +541,19 @@ export async function movimentacoesEstoqueRoutes(app: FastifyInstance) {
         return { status: 200 as const, body: serializeMovimentacao(updated as Record<string, unknown>) }
       })
 
+      if (result.status === 200) {
+        const uid = getUsuarioIdFromRequest(request)
+        const row = result.body as { id: string }
+        if (uid && row?.id) {
+          await registrarLogAuditoria(request.log, {
+            usuarioId: uid,
+            acao: AcaoAuditoria.MOVIMENTACAO_ESTOQUE_UPDATE,
+            detalhes: JSON.stringify({ movimentacao_id: row.id }),
+            ipOrigem: request.ip
+          })
+        }
+      }
+
       return reply.status(result.status).send(result.body)
     }
   )
@@ -596,6 +623,15 @@ export async function movimentacoesEstoqueRoutes(app: FastifyInstance) {
       })
 
       if (result.status === 204) {
+        const uid = getUsuarioIdFromRequest(request)
+        if (uid) {
+          await registrarLogAuditoria(request.log, {
+            usuarioId: uid,
+            acao: AcaoAuditoria.MOVIMENTACAO_ESTOQUE_DELETE,
+            detalhes: JSON.stringify({ movimentacao_id: parsed.data.id }),
+            ipOrigem: request.ip
+          })
+        }
         return reply.status(204).send()
       }
       return reply.status(result.status).send(result.body)

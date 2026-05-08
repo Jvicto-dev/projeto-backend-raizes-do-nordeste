@@ -9,6 +9,7 @@ import {
   invalidEstoqueUpdatePayloadError
 } from '../http/errors.js'
 import { authenticate } from '../middlewares/authenticate.js'
+import { AcaoAuditoria, getUsuarioIdFromRequest, registrarLogAuditoria } from '../services/audit-log.js'
 
 const errorResponseSchema = {
   type: 'object',
@@ -267,6 +268,16 @@ export async function estoqueRoutes(app: FastifyInstance) {
         .where({ id })
         .first()
 
+      const actorId = getUsuarioIdFromRequest(request)
+      if (actorId) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorId,
+          acao: AcaoAuditoria.ESTOQUE_CREATE,
+          detalhes: JSON.stringify({ estoque_id: id, unidade_id, produto_id }),
+          ipOrigem: request.ip
+        })
+      }
+
       return reply.status(201).send(created)
     }
   )
@@ -395,6 +406,16 @@ export async function estoqueRoutes(app: FastifyInstance) {
         .where({ id })
         .first()
 
+      const actorId = getUsuarioIdFromRequest(request)
+      if (actorId) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorId,
+          acao: AcaoAuditoria.ESTOQUE_UPDATE,
+          detalhes: JSON.stringify({ estoque_id: id, campos: Object.keys(patch) }),
+          ipOrigem: request.ip
+        })
+      }
+
       return reply.status(200).send(updated)
     }
   )
@@ -449,6 +470,16 @@ export async function estoqueRoutes(app: FastifyInstance) {
         return reply.status(404).send({
           error: 'NAO_ENCONTRADO',
           message: 'Estoque nao encontrado.'
+        })
+      }
+
+      const actorId = getUsuarioIdFromRequest(request)
+      if (actorId) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorId,
+          acao: AcaoAuditoria.ESTOQUE_DELETE,
+          detalhes: JSON.stringify({ estoque_id: parsed.data.id }),
+          ipOrigem: request.ip
         })
       }
 

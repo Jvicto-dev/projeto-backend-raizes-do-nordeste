@@ -30,6 +30,7 @@ import {
   invalidPedidoUpdatePayloadError
 } from '../http/errors.js'
 import { authenticate } from '../middlewares/authenticate.js'
+import { AcaoAuditoria, getUsuarioIdFromRequest, registrarLogAuditoria } from '../services/audit-log.js'
 
 /** Padrao minimo de erro na documentacao OpenAPI (alinhado ao restante da API). */
 const errorResponseSchema = {
@@ -651,6 +652,22 @@ export async function pedidosRoutes(app: FastifyInstance) {
 
       const itens = await carregarItensPedido(pedidoId)
 
+      const actorPedido = getUsuarioIdFromRequest(request)
+      if (actorPedido) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorPedido,
+          acao: AcaoAuditoria.PEDIDO_CREATE,
+          detalhes: JSON.stringify({
+            pedido_id: pedidoId,
+            cliente_id: clienteId,
+            unidade_id: parsed.data.unidade_id,
+            canalPedido: parsed.data.canalPedido,
+            valor_total: valorTotal
+          }),
+          ipOrigem: request.ip
+        })
+      }
+
       return reply.status(201).send({
         ...serializePedido(created as Record<string, unknown>),
         itens
@@ -814,6 +831,20 @@ export async function pedidosRoutes(app: FastifyInstance) {
 
       const itens = await carregarItensPedido(pp.data.id)
 
+      const actorStatus = getUsuarioIdFromRequest(request)
+      if (actorStatus) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorStatus,
+          acao: AcaoAuditoria.PEDIDO_STATUS_UPDATE,
+          detalhes: JSON.stringify({
+            pedido_id: pp.data.id,
+            status_anterior: atual,
+            status_novo: novo
+          }),
+          ipOrigem: request.ip
+        })
+      }
+
       return reply.status(200).send({
         ...serializePedido(updated as Record<string, unknown>),
         itens
@@ -916,6 +947,16 @@ export async function pedidosRoutes(app: FastifyInstance) {
         }
         await trx('pedidos').where({ id: parsed.data.id }).del()
       })
+
+      const actorDel = getUsuarioIdFromRequest(request)
+      if (actorDel) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorDel,
+          acao: AcaoAuditoria.PEDIDO_DELETE,
+          detalhes: JSON.stringify({ pedido_id: parsed.data.id, status_anterior: st }),
+          ipOrigem: request.ip
+        })
+      }
 
       return reply.status(204).send()
     }

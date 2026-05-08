@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { db } from '../database.js'
 import { forbiddenError } from '../http/errors.js'
 import { authenticate } from '../middlewares/authenticate.js'
+import { AcaoAuditoria, getUsuarioIdFromRequest, registrarLogAuditoria } from '../services/audit-log.js'
 
 const errorResponseSchema = {
   type: 'object',
@@ -370,6 +371,20 @@ export async function pagamentosRoutes(app: FastifyInstance) {
         return created as Record<string, unknown>
       })
 
+      const actorPag = getUsuarioIdFromRequest(request)
+      if (actorPag) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorPag,
+          acao: AcaoAuditoria.PAGAMENTO_CREATE,
+          detalhes: JSON.stringify({
+            pagamento_id: pagamentoId,
+            pedido_id: pb.data.pedido_id,
+            resultado_mock: pb.data.resultado_mock
+          }),
+          ipOrigem: request.ip
+        })
+      }
+
       return reply.status(201).send(serializePagamento(resultado))
     }
   )
@@ -446,6 +461,17 @@ export async function pagamentosRoutes(app: FastifyInstance) {
 
       await db('pagamentos').where({ id: pp.data.id }).update(patch)
       const updated = await db('pagamentos').where({ id: pp.data.id }).first()
+
+      const actorPut = getUsuarioIdFromRequest(request)
+      if (actorPut) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorPut,
+          acao: AcaoAuditoria.PAGAMENTO_UPDATE,
+          detalhes: JSON.stringify({ pagamento_id: pp.data.id, campos: Object.keys(patch) }),
+          ipOrigem: request.ip
+        })
+      }
+
       return reply.status(200).send(serializePagamento(updated as Record<string, unknown>))
     }
   )
@@ -502,6 +528,17 @@ export async function pagamentosRoutes(app: FastifyInstance) {
       }
 
       await db('pagamentos').where({ id: pp.data.id }).del()
+
+      const actorDelPag = getUsuarioIdFromRequest(request)
+      if (actorDelPag) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorDelPag,
+          acao: AcaoAuditoria.PAGAMENTO_DELETE,
+          detalhes: JSON.stringify({ pagamento_id: pp.data.id }),
+          ipOrigem: request.ip
+        })
+      }
+
       return reply.status(204).send()
     }
   )

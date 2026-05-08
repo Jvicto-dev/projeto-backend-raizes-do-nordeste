@@ -9,6 +9,7 @@ import {
   invalidProdutoUpdatePayloadError
 } from '../http/errors.js'
 import { authenticate } from '../middlewares/authenticate.js'
+import { AcaoAuditoria, getUsuarioIdFromRequest, registrarLogAuditoria } from '../services/audit-log.js'
 
 const errorResponseSchema = {
   type: 'object',
@@ -266,6 +267,16 @@ export async function produtosRoutes(app: FastifyInstance) {
         .where({ id })
         .first()
 
+      const actorId = getUsuarioIdFromRequest(request)
+      if (actorId) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorId,
+          acao: AcaoAuditoria.PRODUTO_CREATE,
+          detalhes: JSON.stringify({ produto_id: id }),
+          ipOrigem: request.ip
+        })
+      }
+
       return reply.status(201).send(serializeProduto(created!))
     }
   )
@@ -375,6 +386,16 @@ export async function produtosRoutes(app: FastifyInstance) {
         .where({ id })
         .first()
 
+      const actorId = getUsuarioIdFromRequest(request)
+      if (actorId) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorId,
+          acao: AcaoAuditoria.PRODUTO_UPDATE,
+          detalhes: JSON.stringify({ produto_id: id, campos: Object.keys(patch) }),
+          ipOrigem: request.ip
+        })
+      }
+
       return reply.status(200).send(serializeProduto(updated!))
     }
   )
@@ -455,6 +476,16 @@ export async function produtosRoutes(app: FastifyInstance) {
       }
 
       await db('produtos').where({ id }).del()
+
+      const actorId = getUsuarioIdFromRequest(request)
+      if (actorId) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorId,
+          acao: AcaoAuditoria.PRODUTO_DELETE,
+          detalhes: JSON.stringify({ produto_id: id }),
+          ipOrigem: request.ip
+        })
+      }
 
       return reply.status(204).send()
     }

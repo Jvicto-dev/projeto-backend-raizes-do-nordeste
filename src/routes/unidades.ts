@@ -9,6 +9,7 @@ import {
   invalidUnidadeUpdatePayloadError
 } from '../http/errors.js'
 import { authenticate } from '../middlewares/authenticate.js'
+import { AcaoAuditoria, getUsuarioIdFromRequest, registrarLogAuditoria } from '../services/audit-log.js'
 
 const errorResponseSchema = {
   type: 'object',
@@ -244,6 +245,16 @@ export async function unidadesRoutes(app: FastifyInstance) {
         .where({ id })
         .first()
 
+      const actorId = getUsuarioIdFromRequest(request)
+      if (actorId) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorId,
+          acao: AcaoAuditoria.UNIDADE_CREATE,
+          detalhes: JSON.stringify({ unidade_id: id }),
+          ipOrigem: request.ip
+        })
+      }
+
       return reply.status(201).send(created!)
     }
   )
@@ -339,6 +350,16 @@ export async function unidadesRoutes(app: FastifyInstance) {
         .where({ id })
         .first()
 
+      const actorId = getUsuarioIdFromRequest(request)
+      if (actorId) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorId,
+          acao: AcaoAuditoria.UNIDADE_UPDATE,
+          detalhes: JSON.stringify({ unidade_id: id, campos: Object.keys(patch) }),
+          ipOrigem: request.ip
+        })
+      }
+
       return reply.status(200).send(updated!)
     }
   )
@@ -412,6 +433,16 @@ export async function unidadesRoutes(app: FastifyInstance) {
       }
 
       await db('unidades').where({ id }).del()
+
+      const actorId = getUsuarioIdFromRequest(request)
+      if (actorId) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorId,
+          acao: AcaoAuditoria.UNIDADE_DELETE,
+          detalhes: JSON.stringify({ unidade_id: id }),
+          ipOrigem: request.ip
+        })
+      }
 
       return reply.status(204).send()
     }

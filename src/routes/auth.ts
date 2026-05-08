@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import { db } from '../database.js'
 import { invalidCredentialsError, invalidPayloadError } from '../http/errors.js'
+import { AcaoAuditoria, registrarLogAuditoria } from '../services/audit-log.js'
 import { verifyPassword } from '../utils/password.js'
 
 const errorResponseSchema = {
@@ -88,6 +89,13 @@ export async function authRoutes(app: FastifyInstance) {
         { sub: user.id, perfil: user.perfil },
         { expiresIn: '1h' }
       )
+
+      await registrarLogAuditoria(request.log, {
+        usuarioId: user.id,
+        acao: AcaoAuditoria.AUTH_LOGIN,
+        detalhes: JSON.stringify({ email: user.email, perfil: user.perfil }),
+        ipOrigem: request.ip
+      })
 
       // Retorno do login seguindo padrão Bearer para uso no Authorization header.
       return reply.status(200).send({

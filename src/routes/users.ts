@@ -10,6 +10,7 @@ import {
   invalidUserUpdatePayloadError
 } from '../http/errors.js'
 import { authenticate } from '../middlewares/authenticate.js'
+import { AcaoAuditoria, getUsuarioIdFromRequest, registrarLogAuditoria } from '../services/audit-log.js'
 import { hashPassword } from '../utils/password.js'
 
 const errorResponseSchema = {
@@ -218,6 +219,16 @@ export async function usersRoutes(app: FastifyInstance) {
         .where({ id })
         .first()
 
+      const actorId = getUsuarioIdFromRequest(request)
+      if (actorId) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorId,
+          acao: AcaoAuditoria.USUARIO_CREATE,
+          detalhes: JSON.stringify({ novo_usuario_id: id, email, perfil }),
+          ipOrigem: request.ip
+        })
+      }
+
       return reply.status(201).send(createdUser)
     }
   )
@@ -357,6 +368,16 @@ export async function usersRoutes(app: FastifyInstance) {
         .where({ id })
         .first()
 
+      const actorId = getUsuarioIdFromRequest(request)
+      if (actorId) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorId,
+          acao: AcaoAuditoria.USUARIO_UPDATE,
+          detalhes: JSON.stringify({ usuario_alvo_id: id, campos: Object.keys(patch) }),
+          ipOrigem: request.ip
+        })
+      }
+
       return reply.status(200).send(updatedUser)
     }
   )
@@ -422,6 +443,16 @@ export async function usersRoutes(app: FastifyInstance) {
         return reply.status(404).send({
           error: 'NAO_ENCONTRADO',
           message: 'Usuario nao encontrado.'
+        })
+      }
+
+      const actorId = getUsuarioIdFromRequest(request)
+      if (actorId) {
+        await registrarLogAuditoria(request.log, {
+          usuarioId: actorId,
+          acao: AcaoAuditoria.USUARIO_DELETE,
+          detalhes: JSON.stringify({ usuario_removido_id: id }),
+          ipOrigem: request.ip
         })
       }
 

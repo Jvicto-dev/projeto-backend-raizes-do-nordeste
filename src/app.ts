@@ -8,6 +8,7 @@ import { authRoutes } from './routes/auth.js'
 import { estoqueRoutes } from './routes/estoque.js'
 import { fidelidadeRoutes } from './routes/fidelidade.js'
 import { helloRoutes } from './routes/hello.js'
+import { logsAuditoriaRoutes } from './routes/logs-auditoria.js'
 import { movimentacoesEstoqueRoutes } from './routes/movimentacoes-estoque.js'
 import { pagamentosRoutes } from './routes/pagamentos.js'
 import { pedidosRoutes } from './routes/pedidos.js'
@@ -47,7 +48,8 @@ void app.register(swagger, {
       { name: 'movimentacoes-estoque', description: 'Movimentacoes de estoque' },
       { name: 'pedidos', description: 'Pedidos e itens' },
       { name: 'pagamentos', description: 'Pagamentos mock' },
-      { name: 'fidelidade', description: 'Programa de fidelidade' }
+      { name: 'fidelidade', description: 'Programa de fidelidade' },
+      { name: 'logs-auditoria', description: 'Trilha de auditoria (somente leitura)' }
     ],
     components: {
       securitySchemes: {
@@ -74,6 +76,7 @@ void app.register(fidelidadeRoutes)
 void app.register(movimentacoesEstoqueRoutes)
 void app.register(pedidosRoutes)
 void app.register(pagamentosRoutes)
+void app.register(logsAuditoriaRoutes)
 void app.register(usersRoutes)
 
 void app.register(swaggerUi, {
