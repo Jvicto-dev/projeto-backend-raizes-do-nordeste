@@ -8,6 +8,7 @@ import {
   invalidEstoqueCreationPayloadError,
   invalidEstoqueUpdatePayloadError
 } from '../http/errors.js'
+import { isAdminOuGerente } from '../authz/perfis.js'
 import { authenticate } from '../middlewares/authenticate.js'
 import { AcaoAuditoria, getUsuarioIdFromRequest, registrarLogAuditoria } from '../services/audit-log.js'
 
@@ -32,11 +33,6 @@ const estoqueResponseProps = {
   }
 } as const
 
-function isAdmin(request: { user?: unknown }): boolean {
-  const authUser = request.user as { perfil?: string } | undefined
-  return authUser?.perfil === 'ADMIN'
-}
-
 async function validateForeignKeys(unidadeId: string, produtoId: string) {
   const unidade = await db('unidades').select('id').where({ id: unidadeId }).first()
   if (!unidade) return { ok: false as const, error: 'Unidade nao encontrada.' }
@@ -57,7 +53,7 @@ export async function estoqueRoutes(app: FastifyInstance) {
         tags: ['estoque'],
         summary: 'Listar estoque',
         description:
-          'Lista itens de estoque com paginacao. Filtros opcionais por unidade_id e produto_id. Requer JWT.',
+          'Lista itens de estoque com paginacao. Filtros opcionais por unidade_id e produto_id. **Qualquer perfil autenticado.**',
         security: [{ bearerAuth: [] }],
         querystring: {
           type: 'object',
@@ -136,7 +132,7 @@ export async function estoqueRoutes(app: FastifyInstance) {
       schema: {
         tags: ['estoque'],
         summary: 'Buscar estoque por id',
-        description: 'Retorna um item de estoque pelo UUID. Requer JWT.',
+        description: 'Retorna um item de estoque pelo UUID. **Qualquer perfil autenticado.**',
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',
@@ -191,9 +187,9 @@ export async function estoqueRoutes(app: FastifyInstance) {
       attachValidation: true,
       schema: {
         tags: ['estoque'],
-        summary: 'Criar item de estoque (somente ADMIN)',
+        summary: 'Criar item de estoque (ADMIN ou GERENTE)',
         description:
-          'Cria um registro de estoque por unidade/produto. Requer token JWT com perfil ADMIN.',
+          'Cria um registro de estoque por unidade/produto. **Perfil ADMIN ou GERENTE.**',
         security: [{ bearerAuth: [] }],
         body: {
           type: 'object',
@@ -220,7 +216,7 @@ export async function estoqueRoutes(app: FastifyInstance) {
         return reply.status(400).send(invalidEstoqueCreationPayloadError())
       }
 
-      if (!isAdmin(request)) {
+      if (!isAdminOuGerente(request)) {
         return reply.status(403).send(forbiddenError())
       }
 
@@ -289,9 +285,9 @@ export async function estoqueRoutes(app: FastifyInstance) {
       attachValidation: true,
       schema: {
         tags: ['estoque'],
-        summary: 'Atualizar item de estoque (somente ADMIN)',
+        summary: 'Atualizar item de estoque (ADMIN ou GERENTE)',
         description:
-          'Atualiza um registro de estoque. Requer token JWT com perfil ADMIN.',
+          'Atualiza um registro de estoque. **Perfil ADMIN ou GERENTE.**',
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',
@@ -323,7 +319,7 @@ export async function estoqueRoutes(app: FastifyInstance) {
         return reply.status(400).send(invalidEstoqueUpdatePayloadError())
       }
 
-      if (!isAdmin(request)) {
+      if (!isAdminOuGerente(request)) {
         return reply.status(403).send(forbiddenError())
       }
 
@@ -427,8 +423,8 @@ export async function estoqueRoutes(app: FastifyInstance) {
       attachValidation: true,
       schema: {
         tags: ['estoque'],
-        summary: 'Remover item de estoque (somente ADMIN)',
-        description: 'Exclui um registro de estoque por id. Requer ADMIN.',
+        summary: 'Remover item de estoque (ADMIN ou GERENTE)',
+        description: 'Exclui um registro de estoque por id. **Perfil ADMIN ou GERENTE.**',
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',
@@ -452,7 +448,7 @@ export async function estoqueRoutes(app: FastifyInstance) {
         })
       }
 
-      if (!isAdmin(request)) {
+      if (!isAdminOuGerente(request)) {
         return reply.status(403).send(forbiddenError())
       }
 

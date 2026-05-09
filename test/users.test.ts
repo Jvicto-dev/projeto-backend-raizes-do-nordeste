@@ -30,6 +30,7 @@ async function ensureUsersTable() {
       table.string('senha_hash').notNullable()
       table.string('perfil').notNullable()
       table.date('data_nascimento')
+      table.uuid('unidade_vinculada_id').nullable()
       table.timestamp('criado_em').defaultTo(db.fn.now())
     })
   }
@@ -38,7 +39,7 @@ async function ensureUsersTable() {
 async function loginAndGetToken(email: string, senha: string): Promise<string> {
   const loginResponse = await app.inject({
     method: 'POST',
-    url: '/auth/login',
+    url: '/v1/auth/login',
     payload: { email, senha }
   })
 
@@ -71,6 +72,7 @@ describe('POST /usuarios', () => {
         senha_hash: hashPassword(adminUser.senha),
         perfil: adminUser.perfil,
         data_nascimento: '1990-01-01',
+        unidade_vinculada_id: null,
         criado_em: db.fn.now()
       },
       {
@@ -80,6 +82,7 @@ describe('POST /usuarios', () => {
         senha_hash: hashPassword(gerenteUser.senha),
         perfil: gerenteUser.perfil,
         data_nascimento: '1991-02-02',
+        unidade_vinculada_id: null,
         criado_em: db.fn.now()
       }
     ])
@@ -90,7 +93,7 @@ describe('POST /usuarios', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/usuarios',
+      url: '/v1/usuarios',
       headers: { authorization: `Bearer ${token}` },
       payload: {
         nome: 'Novo Usuario',
@@ -120,7 +123,7 @@ describe('POST /usuarios', () => {
   it('deve retornar 401 quando criar usuário sem token', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/usuarios',
+      url: '/v1/usuarios',
       payload: {
         nome: 'Sem Token',
         email: 'sem.token@raizes.com',
@@ -141,7 +144,7 @@ describe('POST /usuarios', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/usuarios',
+      url: '/v1/usuarios',
       headers: { authorization: `Bearer ${token}` },
       payload: {
         nome: 'Tentativa Gerente',
@@ -168,12 +171,13 @@ describe('POST /usuarios', () => {
       senha_hash: hashPassword('Senha@123'),
       perfil: 'CLIENTE',
       data_nascimento: '2000-03-03',
+      unidade_vinculada_id: null,
       criado_em: db.fn.now()
     })
 
     const response = await app.inject({
       method: 'POST',
-      url: '/usuarios',
+      url: '/v1/usuarios',
       headers: { authorization: `Bearer ${token}` },
       payload: {
         nome: 'Novo Com Email Duplicado',

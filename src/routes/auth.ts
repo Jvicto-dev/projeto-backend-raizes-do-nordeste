@@ -93,7 +93,7 @@ export async function authRoutes(app: FastifyInstance) {
       await registrarLogAuditoria(request.log, {
         usuarioId: user.id,
         acao: AcaoAuditoria.AUTH_LOGIN,
-        detalhes: JSON.stringify({ email: user.email, perfil: user.perfil }),
+        detalhes: JSON.stringify({ usuario_id: user.id, perfil: user.perfil }),
         ipOrigem: request.ip
       })
 

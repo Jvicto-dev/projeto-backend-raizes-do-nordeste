@@ -1,9 +1,9 @@
 import { scryptSync } from 'node:crypto'
 import { beforeAll, afterAll, describe, expect, it } from 'vitest'
 
-import { app } from './app.js'
-import { db } from './database.js'
-import { errorResponseSchema, unauthorizedError } from './http/errors.js'
+import { app } from '../src/app.js'
+import { db } from '../src/database.js'
+import { errorResponseSchema, unauthorizedError } from '../src/http/errors.js'
 
 // Usuário de teste
 const testUser = {
@@ -31,6 +31,7 @@ describe('API HTTP', () => {
       table.string('senha_hash').notNullable()
       table.string('perfil').notNullable()
       table.date('data_nascimento')
+      table.uuid('unidade_vinculada_id').nullable()
       table.timestamp('criado_em').defaultTo(db.fn.now())
     })
 
@@ -42,6 +43,7 @@ describe('API HTTP', () => {
       senha_hash: makePasswordHash(testUser.senha),
       perfil: testUser.perfil,
       data_nascimento: '1990-01-01',
+      unidade_vinculada_id: null,
       criado_em: db.fn.now()
     })
 
@@ -63,7 +65,7 @@ describe('API HTTP', () => {
       // Faz a requisição de login
       const response = await app.inject({
         method: 'POST',
-        url: '/auth/login',
+        url: '/v1/auth/login',
         payload: { email: testUser.email, senha: testUser.senha }
       })
 
@@ -91,7 +93,7 @@ describe('API HTTP', () => {
     it('deve bloquear /hello sem token', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/hello'
+        url: '/v1/hello'
       })
 
       expect(response.statusCode).toBe(401)
@@ -103,7 +105,7 @@ describe('API HTTP', () => {
     it('deve permitir /hello com token válido', async () => {
       const loginResponse = await app.inject({
         method: 'POST',
-        url: '/auth/login',
+        url: '/v1/auth/login',
         payload: { email: testUser.email, senha: testUser.senha }
       })
 
@@ -111,7 +113,7 @@ describe('API HTTP', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/hello',
+        url: '/v1/hello',
         headers: {
           authorization: `Bearer ${accessToken}`
         }

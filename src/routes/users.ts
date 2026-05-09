@@ -32,7 +32,7 @@ export async function usersRoutes(app: FastifyInstance) {
         tags: ['usuarios'],
         summary: 'Listar usuarios (somente ADMIN)',
         description:
-          'Lista usuarios com paginacao simples (page, limit). Requer token JWT com perfil ADMIN.',
+          '**Somente perfil ADMIN.** Gestão de contas da rede; GERENTE e demais perfis recebem 403.',
         security: [{ bearerAuth: [] }],
         querystring: {
           type: 'object',
@@ -61,13 +61,14 @@ export async function usersRoutes(app: FastifyInstance) {
                 type: 'array',
                 items: {
                   type: 'object',
-                  required: ['id', 'nome', 'email', 'perfil', 'data_nascimento', 'criado_em'],
+                  required: ['id', 'nome', 'email', 'perfil', 'data_nascimento', 'unidade_vinculada_id', 'criado_em'],
                   properties: {
                     id: { type: 'string', format: 'uuid' },
                     nome: { type: 'string' },
                     email: { type: 'string', format: 'email' },
                     perfil: { type: 'string' },
                     data_nascimento: { type: ['string', 'null'], format: 'date' },
+                    unidade_vinculada_id: { type: ['string', 'null'], format: 'uuid' },
                     criado_em: { type: 'string', format: 'date-time' }
                   }
                 }
@@ -110,7 +111,7 @@ export async function usersRoutes(app: FastifyInstance) {
 
       // Obtem usuarios da paginação.
       const data = await db('usuarios')
-        .select('id', 'nome', 'email', 'perfil', 'data_nascimento', 'criado_em')
+        .select('id', 'nome', 'email', 'perfil', 'data_nascimento', 'unidade_vinculada_id', 'criado_em')
         .orderBy('criado_em', 'desc')
         .limit(limit)
         .offset(offset)
@@ -130,7 +131,7 @@ export async function usersRoutes(app: FastifyInstance) {
         tags: ['usuarios'],
         summary: 'Criar usuario (somente ADMIN)',
         description:
-          'Cria um novo usuario com perfil informado. Requer token JWT com perfil ADMIN.',
+          '**Somente perfil ADMIN.** Cria contas (inclui GERENTE, COZINHA, etc.).',
         security: [{ bearerAuth: [] }],
         body: {
           type: 'object',
@@ -140,25 +141,32 @@ export async function usersRoutes(app: FastifyInstance) {
             email: { type: 'string', format: 'email' },
             senha: { type: 'string', minLength: 6 },
             perfil: { type: 'string', enum: ['ADMIN', 'GERENTE', 'CLIENTE', 'COZINHA', 'BALCAO'] },
-            data_nascimento: { type: 'string', format: 'date' }
+            data_nascimento: { type: 'string', format: 'date' },
+            unidade_vinculada_id: {
+              type: 'string',
+              format: 'uuid',
+              description: 'Obrigatorio para COZINHA e BALCAO (fila de pedidos da unidade)'
+            }
           }
         },
         response: {
           201: {
             type: 'object',
-            required: ['id', 'nome', 'email', 'perfil', 'data_nascimento', 'criado_em'],
+            required: ['id', 'nome', 'email', 'perfil', 'data_nascimento', 'unidade_vinculada_id', 'criado_em'],
             properties: {
               id: { type: 'string', format: 'uuid' },
               nome: { type: 'string' },
               email: { type: 'string', format: 'email' },
               perfil: { type: 'string' },
               data_nascimento: { type: ['string', 'null'], format: 'date' },
+              unidade_vinculada_id: { type: ['string', 'null'], format: 'uuid' },
               criado_em: { type: 'string', format: 'date-time' }
             }
           },
           400: { description: 'Payload invalido', ...errorResponseSchema },
           401: { description: 'Token invalido/ausente', ...errorResponseSchema },
           403: { description: 'Perfil sem permissao', ...errorResponseSchema },
+          404: { description: 'Unidade vinculada inexistente', ...errorResponseSchema },
           409: { description: 'Email ja cadastrado', ...errorResponseSchema }
         }
       }
@@ -175,20 +183,43 @@ export async function usersRoutes(app: FastifyInstance) {
         return reply.status(403).send(forbiddenError())
       }
 
-      const bodySchema = z.object({
-        nome: z.string().trim().min(1),
-        email: z.string().trim().email(),
-        senha: z.string().min(6),
-        perfil: z.enum(['ADMIN', 'GERENTE', 'CLIENTE', 'COZINHA', 'BALCAO']),
-        data_nascimento: z.string().date().optional()
-      })
+      const bodySchema = z
+        .object({
+          nome: z.string().trim().min(1),
+          email: z.string().trim().email(),
+          senha: z.string().min(6),
+          perfil: z.enum(['ADMIN', 'GERENTE', 'CLIENTE', 'COZINHA', 'BALCAO']),
+          data_nascimento: z.string().date().optional(),
+          unidade_vinculada_id: z.string().uuid().optional()
+        })
+        .superRefine((data, ctx) => {
+          if (
+            (data.perfil === 'COZINHA' || data.perfil === 'BALCAO') &&
+            data.unidade_vinculada_id === undefined
+          ) {
+            ctx.addIssue({
+              code: 'custom',
+              message: 'unidade_vinculada_id e obrigatorio para perfil COZINHA ou BALCAO.'
+            })
+          }
+        })
 
       const parsedBody = bodySchema.safeParse(request.body)
       if (!parsedBody.success) {
         return reply.status(400).send(invalidPayloadError())
       }
 
-      const { nome, email, senha, perfil, data_nascimento } = parsedBody.data
+      const { nome, email, senha, perfil, data_nascimento, unidade_vinculada_id } = parsedBody.data
+
+      if (unidade_vinculada_id) {
+        const uni = await db('unidades').select('id').where({ id: unidade_vinculada_id }).first()
+        if (!uni) {
+          return reply.status(404).send({
+            error: 'NAO_ENCONTRADO',
+            message: 'Unidade vinculada nao encontrada.'
+          })
+        }
+      }
 
       // Garante unicidade de email para evitar contas duplicadas.
       const existingUser = await db('usuarios').where({ email }).first()
@@ -210,12 +241,13 @@ export async function usersRoutes(app: FastifyInstance) {
         senha_hash,
         perfil,
         data_nascimento: data_nascimento ?? null,
+        unidade_vinculada_id: unidade_vinculada_id ?? null,
         criado_em: db.fn.now()
       })
 
       // Retorna apenas dados públicos do usuário recém-criado.
       const createdUser = await db('usuarios')
-        .select('id', 'nome', 'email', 'perfil', 'data_nascimento', 'criado_em')
+        .select('id', 'nome', 'email', 'perfil', 'data_nascimento', 'unidade_vinculada_id', 'criado_em')
         .where({ id })
         .first()
 
@@ -243,7 +275,7 @@ export async function usersRoutes(app: FastifyInstance) {
         tags: ['usuarios'],
         summary: 'Atualizar usuario (somente ADMIN)',
         description:
-          'Atualiza dados de um usuario existente. Requer token JWT com perfil ADMIN.',
+          '**Somente perfil ADMIN.**',
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',
@@ -259,20 +291,22 @@ export async function usersRoutes(app: FastifyInstance) {
             email: { type: 'string', format: 'email' },
             senha: { type: 'string', minLength: 6 },
             perfil: { type: 'string', enum: ['ADMIN', 'GERENTE', 'CLIENTE', 'COZINHA', 'BALCAO'] },
-            data_nascimento: { type: 'string', format: 'date' }
+            data_nascimento: { type: 'string', format: 'date' },
+            unidade_vinculada_id: { type: ['string', 'null'], format: 'uuid' }
           },
           minProperties: 1
         },
         response: {
           200: {
             type: 'object',
-            required: ['id', 'nome', 'email', 'perfil', 'data_nascimento', 'criado_em'],
+            required: ['id', 'nome', 'email', 'perfil', 'data_nascimento', 'unidade_vinculada_id', 'criado_em'],
             properties: {
               id: { type: 'string', format: 'uuid' },
               nome: { type: 'string' },
               email: { type: 'string', format: 'email' },
               perfil: { type: 'string' },
               data_nascimento: { type: ['string', 'null'], format: 'date' },
+              unidade_vinculada_id: { type: ['string', 'null'], format: 'uuid' },
               criado_em: { type: 'string', format: 'date-time' }
             }
           },
@@ -309,7 +343,8 @@ export async function usersRoutes(app: FastifyInstance) {
           email: z.string().trim().email().optional(),
           senha: z.string().min(6).optional(),
           perfil: z.enum(['ADMIN', 'GERENTE', 'CLIENTE', 'COZINHA', 'BALCAO']).optional(),
-          data_nascimento: z.string().date().optional()
+          data_nascimento: z.string().date().optional(),
+          unidade_vinculada_id: z.union([z.string().uuid(), z.null()]).optional()
         })
         .refine((data) => Object.keys(data).length > 0)
 
@@ -328,7 +363,7 @@ export async function usersRoutes(app: FastifyInstance) {
       }
 
       const { id } = parsedParams.data
-      const { nome, email, senha, perfil, data_nascimento } = parsedBody.data
+      const { nome, email, senha, perfil, data_nascimento, unidade_vinculada_id } = parsedBody.data
 
       // Antes de atualizar, garante que o usuário alvo existe.
       const targetUser = await db('usuarios').where({ id }).first()
@@ -354,17 +389,44 @@ export async function usersRoutes(app: FastifyInstance) {
         }
       }
 
+      if (unidade_vinculada_id !== undefined && unidade_vinculada_id !== null) {
+        const uni = await db('unidades').select('id').where({ id: unidade_vinculada_id }).first()
+        if (!uni) {
+          return reply.status(404).send({
+            error: 'NAO_ENCONTRADO',
+            message: 'Unidade vinculada nao encontrada.'
+          })
+        }
+      }
+
+      const effectivePerfil = perfil ?? String((targetUser as { perfil: string }).perfil)
+      const effectiveUnidade =
+        unidade_vinculada_id !== undefined
+          ? unidade_vinculada_id
+          : (targetUser as { unidade_vinculada_id?: string | null }).unidade_vinculada_id ?? null
+
+      if (
+        (effectivePerfil === 'COZINHA' || effectivePerfil === 'BALCAO') &&
+        (effectiveUnidade === null || effectiveUnidade === '')
+      ) {
+        return reply.status(400).send({
+          error: 'DADOS_INVALIDOS',
+          message: 'Perfil COZINHA ou BALCAO exige unidade_vinculada_id cadastrada.'
+        })
+      }
+
       const patch: Record<string, unknown> = {}
       if (nome !== undefined) patch.nome = nome
       if (email !== undefined) patch.email = email
       if (perfil !== undefined) patch.perfil = perfil
       if (data_nascimento !== undefined) patch.data_nascimento = data_nascimento
       if (senha !== undefined) patch.senha_hash = hashPassword(senha)
+      if (unidade_vinculada_id !== undefined) patch.unidade_vinculada_id = unidade_vinculada_id
 
       await db('usuarios').where({ id }).update(patch)
 
       const updatedUser = await db('usuarios')
-        .select('id', 'nome', 'email', 'perfil', 'data_nascimento', 'criado_em')
+        .select('id', 'nome', 'email', 'perfil', 'data_nascimento', 'unidade_vinculada_id', 'criado_em')
         .where({ id })
         .first()
 
@@ -391,7 +453,7 @@ export async function usersRoutes(app: FastifyInstance) {
       schema: {
         tags: ['usuarios'],
         summary: 'Remover usuario (somente ADMIN)',
-        description: 'Exclui um usuario pelo id. Requer token JWT com perfil ADMIN.',
+        description: '**Somente perfil ADMIN.**',
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',

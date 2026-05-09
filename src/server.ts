@@ -1,5 +1,5 @@
-import { app } from './app'
-import { env } from './env/'
+import { app } from '../src/app.js'
+import { env } from '../src/env/index.js'
 
 app.get('/', (req, res) => {
   return res.send('Hello World')

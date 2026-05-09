@@ -1,10 +1,12 @@
 import fastify from 'fastify'
+import type { FastifyInstance } from 'fastify'
 import jwt from '@fastify/jwt'
 import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
 
 import { env } from './env/index.js'
 import { authRoutes } from './routes/auth.js'
+import { campanhasRoutes } from './routes/campanhas.js'
 import { estoqueRoutes } from './routes/estoque.js'
 import { fidelidadeRoutes } from './routes/fidelidade.js'
 import { helloRoutes } from './routes/hello.js'
@@ -35,9 +37,11 @@ void app.register(swagger, {
     info: {
       title: 'Raízes do Nordeste API',
       description:
-        'API REST para a rede Raízes do Nordeste — gestão multicanal, estoque por unidade e pedidos.',
+        'API REST para a rede Raízes do Nordeste — gestão multicanal, estoque por unidade e pedidos. Rotas versionadas sob `/v1`.\n\n' +
+        '**Perfis (JWT `perfil`):** **ADMIN** — usuários da rede e cadastros globais; **GERENTE** — mesma gestão operacional que ADMIN em unidades, cardápio, estoque, movimentações e campanhas (não gerencia contas em `/usuarios`); **CLIENTE** — pedidos e pagamentos próprios; **COZINHA** / **BALCAO** — fila e status na unidade vinculada, pagamentos conforme rota. Leia o *summary* e a *description* de cada operação: **GET** de catálogo em geral é **qualquer perfil autenticado**; **escritas** de catálogo são **ADMIN ou GERENTE** salvo indicação contrária.',
       version: '1.0.0'
     },
+    servers: [{ url: '/v1', description: 'Versao atual da API (prefixo comum das rotas REST)' }],
     tags: [
       { name: 'auth', description: 'Autenticação' },
       { name: 'hello', description: 'Rotas de exemplo' },
@@ -46,6 +50,7 @@ void app.register(swagger, {
       { name: 'produtos', description: 'Produtos do cardapio' },
       { name: 'estoque', description: 'Estoque por unidade' },
       { name: 'movimentacoes-estoque', description: 'Movimentacoes de estoque' },
+      { name: 'campanhas', description: 'Campanhas e promocoes sazonais (desconto percentual)' },
       { name: 'pedidos', description: 'Pedidos e itens' },
       { name: 'pagamentos', description: 'Pagamentos mock' },
       { name: 'fidelidade', description: 'Programa de fidelidade' },
@@ -63,21 +68,22 @@ void app.register(swagger, {
   }
 })
 
-// Rotas de autenticação
-void app.register(authRoutes, {
-  prefix: '/auth'
-})
+async function registerV1Routes(instance: FastifyInstance) {
+  await instance.register(authRoutes, { prefix: '/auth' })
+  await instance.register(helloRoutes)
+  await instance.register(unidadesRoutes)
+  await instance.register(produtosRoutes)
+  await instance.register(estoqueRoutes)
+  await instance.register(fidelidadeRoutes)
+  await instance.register(movimentacoesEstoqueRoutes)
+  await instance.register(campanhasRoutes)
+  await instance.register(pedidosRoutes)
+  await instance.register(pagamentosRoutes)
+  await instance.register(logsAuditoriaRoutes)
+  await instance.register(usersRoutes)
+}
 
-void app.register(helloRoutes)
-void app.register(unidadesRoutes)
-void app.register(produtosRoutes)
-void app.register(estoqueRoutes)
-void app.register(fidelidadeRoutes)
-void app.register(movimentacoesEstoqueRoutes)
-void app.register(pedidosRoutes)
-void app.register(pagamentosRoutes)
-void app.register(logsAuditoriaRoutes)
-void app.register(usersRoutes)
+void app.register(registerV1Routes, { prefix: '/v1' })
 
 void app.register(swaggerUi, {
   routePrefix: '/documentation'

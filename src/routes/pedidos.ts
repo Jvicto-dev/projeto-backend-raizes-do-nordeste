@@ -13,7 +13,8 @@
  *   (porque a baixa ja tinha ocorrido na criacao). Pedido CANCELADO ja teve estoque devolvido no PUT.
  *
  * Autorizacao resumida:
- * - Listagem/detalhe: CLIENTE ve so seus pedidos; ADMIN e GERENTE veem todos.
+ * - Listagem/detalhe: CLIENTE ve so seus pedidos; ADMIN e GERENTE veem todos;
+ *   COZINHA/BALCAO veem pedidos da `unidade_vinculada_id` do usuario (definida pelo ADMIN).
  * - Criacao: qualquer usuario logado; `cliente_id` no body apenas se ADMIN (pedido em nome de outro usuario).
  * - Atualizacao de status: equipe (COZINHA, BALCAO, etc.) e ADMIN; cliente pode cancelar o proprio em AGUARDANDO_PAGAMENTO.
  * - DELETE: somente ADMIN, com restricoes de status e ausencia de pagamento.
@@ -86,6 +87,7 @@ const pedidoResponseProps = {
     'canalPedido',
     'status',
     'valor_total',
+    'valor_desconto',
     'criado_em'
   ],
   properties: {
@@ -95,6 +97,8 @@ const pedidoResponseProps = {
     canalPedido: { type: 'string', enum: [...CANAIS] },
     status: { type: 'string' },
     valor_total: { type: 'number' },
+    valor_desconto: { type: 'number' },
+    campanha_id: { type: ['string', 'null'], format: 'uuid' },
     criado_em: { type: 'string', format: 'date-time' }
   }
 } as const
@@ -109,6 +113,7 @@ const pedidoDetalheResponseProps = {
     'canalPedido',
     'status',
     'valor_total',
+    'valor_desconto',
     'criado_em',
     'itens'
   ],
@@ -119,6 +124,8 @@ const pedidoDetalheResponseProps = {
     canalPedido: { type: 'string', enum: [...CANAIS] },
     status: { type: 'string' },
     valor_total: { type: 'number' },
+    valor_desconto: { type: 'number' },
+    campanha_id: { type: ['string', 'null'], format: 'uuid' },
     criado_em: { type: 'string', format: 'date-time' },
     itens: { type: 'array', items: itemPedidoResponseProps }
   }
@@ -150,6 +157,25 @@ function podeAtualizarStatusOperacional(request: { user?: unknown }): boolean {
   return p === 'ADMIN' || p === 'GERENTE' || p === 'COZINHA' || p === 'BALCAO'
 }
 
+function perfilCozinhaBalcao(perfil: string | undefined): boolean {
+  return perfil === 'COZINHA' || perfil === 'BALCAO'
+}
+
+/** COZINHA/BALCAO enxergam pedido da mesma unidade vinculada ao usuario operacional. */
+async function podeAcessarPedidoPorPerfil(
+  request: { user?: unknown },
+  pedido: Record<string, unknown>,
+  sub: string
+): Promise<boolean> {
+  if (podeVerTodosPedidos(request)) return true
+  if (String(pedido.cliente_id) === sub) return true
+  const perfil = (request.user as { perfil?: string } | undefined)?.perfil
+  if (!perfilCozinhaBalcao(perfil)) return false
+  const usr = await db('usuarios').select('unidade_vinculada_id').where({ id: sub }).first()
+  if (!usr?.unidade_vinculada_id) return false
+  return String(pedido.unidade_id) === String(usr.unidade_vinculada_id)
+}
+
 /** Normaliza tipos do banco (decimal, Date) para JSON estavel na API. */
 function serializePedido(row: Record<string, unknown>) {
   return {
@@ -159,6 +185,8 @@ function serializePedido(row: Record<string, unknown>) {
     canalPedido: row.canalPedido,
     status: row.status,
     valor_total: Number(row.valor_total),
+    valor_desconto: Number(row.valor_desconto ?? 0),
+    campanha_id: row.campanha_id != null ? String(row.campanha_id) : null,
     criado_em:
       row.criado_em instanceof Date
         ? row.criado_em.toISOString()
@@ -240,7 +268,7 @@ export async function pedidosRoutes(app: FastifyInstance) {
         tags: ['pedidos'],
         summary: 'Listar pedidos',
         description:
-          'Lista pedidos com paginacao. CLIENTE ve apenas os proprios. ADMIN/GERENTE veem todos. Filtros opcionais.',
+          'Lista pedidos com paginacao. CLIENTE ve apenas os proprios. ADMIN/GERENTE veem todos. COZINHA/BALCAO veem pedidos da unidade (`unidade_vinculada_id` no cadastro do usuario). Filtros opcionais.',
         security: [{ bearerAuth: [] }],
         querystring: {
           type: 'object',
@@ -266,7 +294,7 @@ export async function pedidosRoutes(app: FastifyInstance) {
           },
           400: { description: 'Parametros invalidos', ...errorResponseSchema },
           401: { description: 'Token invalido/ausente', ...errorResponseSchema },
-          403: { description: 'Sem permissao para filtro', ...errorResponseSchema }
+          403: { description: 'Sem permissao ou unidade nao vinculada ao perfil operacional', ...errorResponseSchema }
         }
       }
     },
@@ -312,20 +340,38 @@ export async function pedidosRoutes(app: FastifyInstance) {
           'canalPedido',
           'status',
           'valor_total',
+          'valor_desconto',
+          'campanha_id',
           'criado_em'
         )
         .orderBy('criado_em', 'desc')
 
-      // CLIENTE (e demais perfis que nao sao ADMIN/GERENTE): so ve pedidos onde ele e o comprador.
-      if (!podeVerTodosPedidos(request)) {
-        countQuery = countQuery.where({ cliente_id: sub })
-        listQuery = listQuery.where({ cliente_id: sub })
-      } else {
-        // ADMIN/GERENTE: podem filtrar por cliente especifico (painel da matriz/unidade).
+      const perfil = (request.user as { perfil?: string } | undefined)?.perfil
+
+      if (podeVerTodosPedidos(request)) {
         if (q.cliente_id) {
           countQuery = countQuery.where({ cliente_id: q.cliente_id })
           listQuery = listQuery.where({ cliente_id: q.cliente_id })
         }
+      } else if (perfilCozinhaBalcao(perfil)) {
+        const usr = await db('usuarios').select('unidade_vinculada_id').where({ id: sub }).first()
+        if (!usr?.unidade_vinculada_id) {
+          return reply.status(403).send({
+            error: 'CONFIG_INCOMPLETA',
+            message:
+              'Perfil COZINHA ou BALCAO precisa ter unidade_vinculada_id definida pelo ADMIN para listar a fila da unidade.'
+          })
+        }
+        const uid = String(usr.unidade_vinculada_id)
+        countQuery = countQuery.where({ unidade_id: uid })
+        listQuery = listQuery.where({ unidade_id: uid })
+        if (q.cliente_id) {
+          countQuery = countQuery.where({ cliente_id: q.cliente_id })
+          listQuery = listQuery.where({ cliente_id: q.cliente_id })
+        }
+      } else {
+        countQuery = countQuery.where({ cliente_id: sub })
+        listQuery = listQuery.where({ cliente_id: sub })
       }
 
       // Filtros opcionais aplicados a qualquer consulta ja restrita acima.
@@ -342,8 +388,13 @@ export async function pedidosRoutes(app: FastifyInstance) {
         listQuery = listQuery.where({ status: q.status })
       }
 
-      // Impede CLIENTE de usar `cliente_id` na query para espiar pedidos de terceiros.
-      if (!podeVerTodosPedidos(request) && q.cliente_id && q.cliente_id !== sub) {
+      // Impede CLIENTE (e perfis equivalentes a visao "so meus") de usar `cliente_id` para espiar terceiros.
+      if (
+        !podeVerTodosPedidos(request) &&
+        !perfilCozinhaBalcao(perfil) &&
+        q.cliente_id &&
+        q.cliente_id !== sub
+      ) {
         return reply.status(403).send(forbiddenError())
       }
 
@@ -367,7 +418,8 @@ export async function pedidosRoutes(app: FastifyInstance) {
       schema: {
         tags: ['pedidos'],
         summary: 'Buscar pedido por id',
-        description: 'Retorna pedido com itens. CLIENTE so acessa o proprio pedido.',
+        description:
+          'Retorna pedido com itens. CLIENTE so o proprio; COZINHA/BALCAO podem ler pedidos da sua unidade_vinculada_id.',
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',
@@ -416,6 +468,8 @@ export async function pedidosRoutes(app: FastifyInstance) {
           'canalPedido',
           'status',
           'valor_total',
+          'valor_desconto',
+          'campanha_id',
           'criado_em'
         )
         .where({ id: parsed.data.id })
@@ -429,8 +483,7 @@ export async function pedidosRoutes(app: FastifyInstance) {
       }
 
       const pedido = row as Record<string, unknown>
-      // Mesma regra da listagem: cliente comum so le se for dono do pedido.
-      if (!podeVerTodosPedidos(request) && pedido.cliente_id !== sub) {
+      if (!(await podeAcessarPedidoPorPerfil(request, pedido, sub))) {
         return reply.status(403).send(forbiddenError())
       }
 
@@ -455,7 +508,7 @@ export async function pedidosRoutes(app: FastifyInstance) {
         tags: ['pedidos'],
         summary: 'Criar pedido',
         description:
-          'Cria pedido com itens, valida estoque na unidade e baixa quantidade. canalPedido obrigatorio. ADMIN pode informar cliente_id.',
+          '**Qualquer perfil autenticado.** Cria pedido com itens, baixa estoque. `canalPedido` obrigatorio; opcional `campanha_id`. **Somente ADMIN** pode enviar `cliente_id` (pedido para terceiro).',
         security: [{ bearerAuth: [] }],
         body: {
           type: 'object',
@@ -463,6 +516,7 @@ export async function pedidosRoutes(app: FastifyInstance) {
           properties: {
             unidade_id: { type: 'string', format: 'uuid' },
             cliente_id: { type: 'string', format: 'uuid' },
+            campanha_id: { type: 'string', format: 'uuid' },
             canalPedido: { type: 'string', enum: [...CANAIS] },
             itens: {
               type: 'array',
@@ -503,6 +557,7 @@ export async function pedidosRoutes(app: FastifyInstance) {
       const bodySchema = z.object({
         unidade_id: z.string().uuid(),
         cliente_id: z.string().uuid().optional(),
+        campanha_id: z.string().uuid().optional(),
         canalPedido: z.enum(CANAIS),
         itens: z
           .array(
@@ -585,6 +640,53 @@ export async function pedidosRoutes(app: FastifyInstance) {
         linhas.push({ produto_id: produtoId, quantidade, preco_unitario: precoUnit })
       }
 
+      let valorDesconto = 0
+      let campanhaId: string | null = null
+      if (parsed.data.campanha_id) {
+        const camp = await db('campanhas').where({ id: parsed.data.campanha_id }).first()
+        if (!camp) {
+          return reply.status(404).send({
+            error: 'NAO_ENCONTRADO',
+            message: 'Campanha nao encontrada.'
+          })
+        }
+        if (!Boolean((camp as { ativa?: boolean }).ativa)) {
+          return reply.status(409).send({
+            error: 'CONFLITO',
+            message: 'Campanha inativa.'
+          })
+        }
+        const now = new Date()
+        const vde = new Date(
+          (camp as { valido_de: Date | string }).valido_de instanceof Date
+            ? (camp as { valido_de: Date }).valido_de.toISOString()
+            : String((camp as { valido_de: string }).valido_de)
+        )
+        const vat = new Date(
+          (camp as { valido_ate: Date | string }).valido_ate instanceof Date
+            ? (camp as { valido_ate: Date }).valido_ate.toISOString()
+            : String((camp as { valido_ate: string }).valido_ate)
+        )
+        if (now < vde || now > vat) {
+          return reply.status(409).send({
+            error: 'CONFLITO',
+            message: 'Campanha fora do periodo de vigencia.'
+          })
+        }
+        const cUnid = (camp as { unidade_id?: string | null }).unidade_id
+        if (cUnid != null && String(cUnid) !== parsed.data.unidade_id) {
+          return reply.status(409).send({
+            error: 'CONFLITO',
+            message: 'Campanha nao se aplica a esta unidade.'
+          })
+        }
+        const pct = Number((camp as { percentual_desconto: unknown }).percentual_desconto)
+        valorDesconto = Math.round(((valorTotal * pct) / 100) * 100) / 100
+        campanhaId = String((camp as { id: string }).id)
+      }
+
+      const valorFinal = Math.max(0, Math.round((valorTotal - valorDesconto) * 100) / 100)
+
       const pedidoId = randomUUID()
 
       try {
@@ -596,7 +698,9 @@ export async function pedidosRoutes(app: FastifyInstance) {
             unidade_id: parsed.data.unidade_id,
             canalPedido: parsed.data.canalPedido,
             status: 'AGUARDANDO_PAGAMENTO',
-            valor_total: valorTotal,
+            valor_total: valorFinal,
+            valor_desconto: valorDesconto,
+            campanha_id: campanhaId,
             criado_em: trx.fn.now()
           })
 
@@ -645,6 +749,8 @@ export async function pedidosRoutes(app: FastifyInstance) {
           'canalPedido',
           'status',
           'valor_total',
+          'valor_desconto',
+          'campanha_id',
           'criado_em'
         )
         .where({ id: pedidoId })
@@ -662,7 +768,10 @@ export async function pedidosRoutes(app: FastifyInstance) {
             cliente_id: clienteId,
             unidade_id: parsed.data.unidade_id,
             canalPedido: parsed.data.canalPedido,
-            valor_total: valorTotal
+            valor_bruto_itens: valorTotal,
+            valor_desconto: valorDesconto,
+            valor_total: valorFinal,
+            campanha_id: campanhaId
           }),
           ipOrigem: request.ip
         })
@@ -753,7 +862,7 @@ export async function pedidosRoutes(app: FastifyInstance) {
       const atual = String(pedido.status)
       const novo = pb.data.status
 
-      if (!podeVerTodosPedidos(request) && pedido.cliente_id !== sub) {
+      if (!(await podeAcessarPedidoPorPerfil(request, pedido, sub))) {
         return reply.status(403).send(forbiddenError())
       }
 
@@ -824,6 +933,8 @@ export async function pedidosRoutes(app: FastifyInstance) {
           'canalPedido',
           'status',
           'valor_total',
+          'valor_desconto',
+          'campanha_id',
           'criado_em'
         )
         .where({ id: pp.data.id })

@@ -1,6 +1,27 @@
 # Raízes do Nordeste — API (backend)
 
-API REST em **Node.js** com **Fastify**, **Knex** e **JWT**, desenvolvida no contexto do Projeto Multidisciplinar de Back-End da Uninter. O domínio prevê gestão multicanal, estoque por unidade e fluxo de pedidos. Hoje o código cobre autenticação, **CRUD de usuários** (restrito a **ADMIN** nas operações de escrita), **CRUD de unidades**, **CRUD de produtos**, **CRUD de estoque**, **CRUD de movimentações de estoque**, **pedidos**, **pagamentos mock** e **fidelidade**, além de migrations, seed e documentação OpenAPI.
+## Como executar o projeto localmente
+
+Siga **na ordem** (tudo na **raiz** do repositório, no terminal). Com isso a API sobe com banco SQLite, tabelas criadas, usuários de demonstração e documentação acessível.
+
+| # | O que fazer | Comando / detalhe |
+|---|-------------|-------------------|
+| 1 | **Requisitos** na máquina | [Node.js](https://nodejs.org/) **18+** (recomendado LTS) e **npm** (vem com o Node). |
+| 2 | Instalar dependências | `npm install` |
+| 3 | Variáveis de ambiente | Na raiz, crie o arquivo **`.env`**. O jeito mais rápido é copiar o exemplo:<br>• Windows (PowerShell): `Copy-Item .env.example .env`<br>• Linux / macOS: `cp .env.example .env`<br>O `.env.example` já define `DATABASE_CLIENT=sqlite`, `DATABASE_URL=./db/dev.db`, `JWT_SECRET` (mínimo 8 caracteres), `PORT=3333` e `NODE_ENV=development`. **Não suba a API sem o `.env`** — o processo encerra se `JWT_SECRET` ou o banco estiverem inválidos. |
+| 4 | Criar tabelas (migrations) | `npm run knex -- migrate:latest` |
+| 5 | Popular usuários e unidade de demo (login de teste) | `npm run knex -- seed:run` |
+| 6 | Iniciar o servidor | `npm run dev` |
+
+**Conferência rápida:** com o servidor no ar, abra no navegador `http://localhost:3333` — deve aparecer o texto `Hello World`. Documentação interativa: `http://localhost:3333/documentation`. Rotas JSON ficam sob **`/v1`** (ex.: `POST http://localhost:3333/v1/auth/login`).
+
+**Login de teste** (após o passo 5): `POST /v1/auth/login` com corpo `{"email":"admin@raizes.com","senha":"Admin@123"}`. Outros perfis e senhas estão na tabela **Usuários de demonstração (login)** mais abaixo neste README.
+
+**Problemas comuns:** pasta `db` inexistente — crie `db` na raiz ou use o caminho em `DATABASE_URL`; erro de variável — confira se o `.env` está na **raiz** (mesmo nível que `package.json`); porta em uso — altere `PORT` no `.env`.
+
+---
+
+API REST em **Node.js** com **Fastify**, **Knex** e **JWT**, desenvolvida no contexto do Projeto Multidisciplinar de Back-End da Uninter. O domínio prevê gestão multicanal, estoque por unidade e fluxo de pedidos. Recursos principais: autenticação, **CRUD de usuários**, **unidades**, **produtos**, **estoque**, **movimentações**, **campanhas promocionais** (desconto percentual aplicável ao pedido), **pedidos** (com `valor_desconto` e `campanha_id` opcional), **pagamentos mock**, **fidelidade** (acúmulo automático de pontos no pagamento aprovado, com consentimento), **logs de auditoria** (leitura ADMIN/GERENTE), migrations, seed e OpenAPI. **Todas as rotas REST estáveis ficam sob o prefixo `/v1`** (exceto `/`, `/documentation` e health implícito).
 
 ## Requisitos
 
@@ -15,7 +36,7 @@ npm install
 
 ## Variáveis de ambiente
 
-Crie um arquivo `.env` na raiz (veja `.env.example`). Em testes, o projeto carrega automaticamente `.env.test` quando `NODE_ENV=test`.
+Crie um arquivo `.env` na raiz (veja `.env.example`). Em testes (`NODE_ENV=test`), o projeto tenta carregar `.env.test`; existe também **`.env.test.example`** com valores seguros de exemplo para copiar em CI ou máquina local.
 
 | Variável | Descrição |
 |----------|-----------|
@@ -32,6 +53,7 @@ Crie um arquivo `.env` na raiz (veja `.env.example`). Em testes, o projeto carre
 | `npm run dev` | Sobe o servidor com reload (`tsx watch`) |
 | `npm test` | Executa a suíte de testes (Vitest) |
 | `npm run knex -- <comando>` | CLI do Knex (migrations, seeds) |
+| `npm start` | Sobe a API sem watch (`tsx src/server.ts`) |
 
 ### Banco de dados (Knex)
 
@@ -44,19 +66,31 @@ npm run knex -- migrate:latest
 # Reverter última migration
 npm run knex -- migrate:rollback
 
-# Popular dados iniciais (ex.: usuário admin)
+# Popular dados iniciais (usuários demo + unidade — ver tabela abaixo)
 npm run knex -- seed:run
 ```
 
-As migrations criam as tabelas: `usuarios`, `unidades`, `produtos`, `estoque` (com restrição única por `unidade_id` + `produto_id`), `movimentacoes_estoque`, `pedidos`, `itens_pedido`, `fidelidade`, `pagamentos`, `logs_auditoria`. A seed `202604130001_seed_usuario_admin` insere um administrador de desenvolvimento (email `admin@raizes.com`; senha definida no código da seed — consulte `db/seeds/202604130001_seed_usuario_admin.ts`).
+As migrations criam as tabelas: `usuarios` (com `unidade_vinculada_id` opcional para perfis operacionais), `unidades`, `produtos`, `estoque` (restrição única por `unidade_id` + `produto_id`), `movimentacoes_estoque`, `campanhas`, `pedidos` (com `valor_desconto` e `campanha_id` opcional), `itens_pedido`, `fidelidade`, `pagamentos`, `logs_auditoria`.
+
+### Usuários de demonstração (login)
+
+Após `npm run knex -- seed:run`, use **`POST /v1/auth/login`** com `email` e `senha` em JSON.
+
+| Perfil | E-mail | Senha | Observação |
+|--------|--------|--------|------------|
+| **ADMIN** | `admin@raizes.com` | `Admin@123` | Gestão ampla (usuários, unidades, produtos, campanhas, etc.) |
+| **GERENTE** | `gerente@raizes.com` | `Gerente@123` | Visão gerencial (pedidos, fidelidade, auditoria, entre outras) |
+| **CLIENTE** | `cliente@raizes.com` | `Cliente@123` | Fluxo de cliente (pedidos próprios, pagamentos associados, etc.) |
+| **COZINHA** | `cozinha@raizes.com` | `Cozinha@123` | Operacional; vinculado à **Unidade Demo** (mesma unidade do Balcão) |
+| **BALCAO** | `balcao@raizes.com` | `Balcao@123` | Operacional; vinculado à **Unidade Demo** |
+
+A seed `db/seeds/202604130001_seed_usuarios_demonstracao.ts` também cria uma **unidade de demonstração** (`Unidade Demo Nordeste`, id fixo `aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa`) e define `usuarios.unidade_vinculada_id` para **COZINHA** e **BALCAO**, conforme regras da API. Reexecutar a seed atualiza senhas e dados desses e-mails sem apagar linhas (evita quebrar chaves estrangeiras se já houver pedidos).
+
+> **Atenção:** senhas são apenas para **desenvolvimento**; não use em produção.
 
 ## Executar a API
 
-```bash
-npm run dev
-```
-
-Servidor escuta em `http://localhost:<PORT>` (padrão `3333`).
+O comando de desenvolvimento já está no passo a passo [Como executar o projeto localmente](#como-executar-o-projeto-localmente): `npm run dev`. Servidor em `http://localhost:<PORT>` (padrão **3333**); rotas REST em `/v1/...`.
 
 ## Documentação (Swagger / OpenAPI)
 
@@ -64,56 +98,65 @@ Com a API rodando, acesse a UI do Swagger em:
 
 `http://localhost:<PORT>/documentation`
 
-Lá aparecem os endpoints registrados, esquemas e exemplos de request/response.
+Lá aparecem os endpoints registrados (com servidor base `/v1` no OpenAPI), esquemas e exemplos de request/response.
 
 ## Endpoints atuais
+
+Prefixo da API: **`/v1`** (ex.: `POST /v1/auth/login`). A raiz **`GET /`** permanece fora do versionamento.
 
 | Método | Caminho | Autenticação | Descrição |
 |--------|---------|--------------|-----------|
 | `GET` | `/` | Não | Resposta texto: `Hello World` |
-| `POST` | `/auth/login` | Não | Login com `email` e `senha` (JSON); retorna `accessToken` (Bearer, 1h) e dados básicos do usuário |
-| `GET` | `/hello` | Sim (JWT) | Exemplo de rota protegida |
-| `GET` | `/usuarios` | Sim (JWT, perfil **ADMIN**) | Lista usuários com paginação (`?page=1&limit=10`; padrão page=1, limit=10; máx. limit=100) |
-| `POST` | `/usuarios` | Sim (JWT, perfil **ADMIN**) | Cadastro de usuário (`nome`, `email`, `senha`, `perfil`, `data_nascimento` opcional) |
-| `PUT` | `/usuarios/:id` | Sim (JWT, perfil **ADMIN**) | Atualização parcial; envie ao menos um campo válido |
-| `DELETE` | `/usuarios/:id` | Sim (JWT, perfil **ADMIN**) | Remove usuário; sucesso **204** sem corpo |
-| `GET` | `/unidades` | Sim (JWT, qualquer perfil) | Lista unidades com paginação (`?page=1&limit=10`; máx. `limit=100`); filtro opcional `?ativa=true` ou `?ativa=false` |
-| `GET` | `/unidades/:id` | Sim (JWT, qualquer perfil) | Detalhe por UUID |
-| `POST` | `/unidades` | Sim (JWT, perfil **ADMIN**) | Cria unidade (`nome`, `endereco`, `tipo_cozinha`; `ativa` opcional, padrão `true`) |
-| `PUT` | `/unidades/:id` | Sim (JWT, perfil **ADMIN**) | Atualização parcial (`nome`, `endereco`, `tipo_cozinha`, `ativa`) |
-| `DELETE` | `/unidades/:id` | Sim (JWT, perfil **ADMIN**) | Remove unidade; **204**; **409** se existirem pedidos vinculados à unidade |
-| `GET` | `/produtos` | Sim (JWT, qualquer perfil) | Lista produtos com paginação; filtro opcional `?categoria=NomeDaCategoria` (texto exato) |
-| `GET` | `/produtos/:id` | Sim (JWT, qualquer perfil) | Detalhe por UUID |
-| `POST` | `/produtos` | Sim (JWT, perfil **ADMIN**) | Cria produto (`nome`, `preco_base`, `categoria`; `descricao` opcional) |
-| `PUT` | `/produtos/:id` | Sim (JWT, perfil **ADMIN**) | Atualização parcial (`nome`, `descricao`, `preco_base`, `categoria`) |
-| `DELETE` | `/produtos/:id` | Sim (JWT, perfil **ADMIN**) | Remove produto; **204**; **409** se houver itens de pedido ou movimentações de estoque vinculados |
-| `GET` | `/estoque` | Sim (JWT, qualquer perfil) | Lista itens de estoque com paginação; filtros opcionais `?unidade_id=<uuid>&produto_id=<uuid>` |
-| `GET` | `/estoque/:id` | Sim (JWT, qualquer perfil) | Detalhe por UUID |
-| `POST` | `/estoque` | Sim (JWT, perfil **ADMIN**) | Cria item de estoque (`unidade_id`, `produto_id`; `quantidade_atual`/`ponto_reposicao` opcionais) |
-| `PUT` | `/estoque/:id` | Sim (JWT, perfil **ADMIN**) | Atualiza item (`unidade_id`, `produto_id`, `quantidade_atual`, `ponto_reposicao`) |
-| `DELETE` | `/estoque/:id` | Sim (JWT, perfil **ADMIN**) | Remove item de estoque; **204**; **404** se não existir |
-| `GET` | `/movimentacoes-estoque` | Sim (JWT, qualquer perfil) | Lista movimentações com paginação e filtros por `unidade_id`, `produto_id`, `tipo_movimentacao` |
-| `GET` | `/movimentacoes-estoque/:id` | Sim (JWT, qualquer perfil) | Detalhe por UUID |
-| `POST` | `/movimentacoes-estoque` | Sim (JWT, perfil **ADMIN**) | Cria movimentação ENTRADA/SAIDA e atualiza saldo em `estoque` |
-| `PUT` | `/movimentacoes-estoque/:id` | Sim (JWT, perfil **ADMIN**) | Atualiza movimentação (reverte efeito antigo e aplica novo no saldo) |
-| `DELETE` | `/movimentacoes-estoque/:id` | Sim (JWT, perfil **ADMIN**) | Remove movimentação e reverte impacto no saldo |
-| `GET` | `/pedidos` | Sim (JWT) | Lista pedidos (CLIENTE só os seus; **ADMIN**/**GERENTE** veem todos); filtros `unidade_id`, `cliente_id`, `canalPedido`, `status` |
-| `GET` | `/pedidos/:id` | Sim (JWT) | Detalhe com itens (CLIENTE só o próprio pedido) |
-| `POST` | `/pedidos` | Sim (JWT) | Cria pedido (`unidade_id`, `canalPedido`, `itens[]`); opcional `cliente_id` só **ADMIN**; baixa estoque; **409** se faltar estoque |
-| `PUT` | `/pedidos/:id` | Sim (JWT) | Atualiza `status` (transições válidas); **CANCELADO** devolve estoque |
-| `DELETE` | `/pedidos/:id` | Sim (JWT, **ADMIN**) | Remove pedido (sem registro em `pagamentos`); **409** se status inválido |
-| `GET` | `/pagamentos` | Sim (JWT) | Lista pagamentos (ADMIN/GERENTE veem todos; demais perfis veem pagamentos dos próprios pedidos) |
-| `GET` | `/pagamentos/:id` | Sim (JWT) | Detalhe de pagamento com controle por dono do pedido |
-| `POST` | `/pagamentos` | Sim (JWT) | Registra pagamento mock (`APROVADO`/`NEGADO`) para pedido em `AGUARDANDO_PAGAMENTO` |
-| `PUT` | `/pagamentos/:id` | Sim (JWT, perfis operacionais) | Atualiza metadados (`metodo_pagamento`, `external_id`, `payload_retorno`) |
-| `DELETE` | `/pagamentos/:id` | Sim (JWT, **ADMIN**) | Remove pagamento NEGADO (APROVADO não pode ser removido) |
-| `GET` | `/fidelidade` | Sim (JWT) | Lista registros (ADMIN/GERENTE veem todos; CLIENTE vê apenas o próprio) |
-| `GET` | `/fidelidade/:id` | Sim (JWT) | Detalhe por id com controle de acesso |
-| `POST` | `/fidelidade` | Sim (JWT, **ADMIN/GERENTE**) | Cria cadastro de fidelidade para cliente |
-| `PUT` | `/fidelidade/:id` | Sim (JWT, **ADMIN/GERENTE**) | Atualiza saldo/consentimento (`ajuste_pontos_delta` para crédito/débito) |
-| `DELETE` | `/fidelidade/:id` | Sim (JWT, **ADMIN**) | Remove cadastro de fidelidade |
+| `POST` | `/v1/auth/login` | Não | Login com `email` e `senha` (JSON); retorna `accessToken` (Bearer, 1h) e dados básicos do usuário |
+| `GET` | `/v1/hello` | Sim (JWT) | Exemplo de rota protegida |
+| `GET` | `/v1/usuarios` | Sim (JWT, perfil **ADMIN**) | Lista usuários com paginação (`?page=1&limit=10`; máx. limit=100) |
+| `POST` | `/v1/usuarios` | Sim (JWT, perfil **ADMIN**) | Cadastro (`nome`, `email`, `senha`, `perfil`, `data_nascimento` opcional, `unidade_vinculada_id` obrigatório para **COZINHA**/**BALCAO**) |
+| `PUT` | `/v1/usuarios/:id` | Sim (JWT, perfil **ADMIN**) | Atualização parcial (inclui `unidade_vinculada_id`) |
+| `DELETE` | `/v1/usuarios/:id` | Sim (JWT, perfil **ADMIN**) | Remove usuário; **204** |
+| `GET` | `/v1/unidades` | Sim (JWT, qualquer perfil) | Lista unidades com paginação; filtro `?ativa=` |
+| `GET` | `/v1/unidades/:id` | Sim (JWT, qualquer perfil) | Detalhe por UUID |
+| `POST` | `/v1/unidades` | Sim (JWT, perfil **ADMIN**) | Cria unidade |
+| `PUT` | `/v1/unidades/:id` | Sim (JWT, perfil **ADMIN**) | Atualização parcial |
+| `DELETE` | `/v1/unidades/:id` | Sim (JWT, perfil **ADMIN**) | Remove unidade (**409** se houver pedidos) |
+| `GET` | `/v1/produtos` | Sim (JWT, qualquer perfil) | Lista produtos; filtro `?categoria=` |
+| `GET` | `/v1/produtos/:id` | Sim (JWT, qualquer perfil) | Detalhe |
+| `POST` | `/v1/produtos` | Sim (JWT, perfil **ADMIN**) | Cria produto |
+| `PUT` | `/v1/produtos/:id` | Sim (JWT, perfil **ADMIN**) | Atualização parcial |
+| `DELETE` | `/v1/produtos/:id` | Sim (JWT, perfil **ADMIN**) | Remove produto |
+| `GET` | `/v1/estoque` | Sim (JWT, qualquer perfil) | Lista estoque; filtros `unidade_id`, `produto_id` |
+| `GET` | `/v1/estoque/:id` | Sim (JWT, qualquer perfil) | Detalhe |
+| `POST` | `/v1/estoque` | Sim (JWT, perfil **ADMIN**) | Cria linha de estoque |
+| `PUT` | `/v1/estoque/:id` | Sim (JWT, perfil **ADMIN**) | Atualiza |
+| `DELETE` | `/v1/estoque/:id` | Sim (JWT, perfil **ADMIN**) | Remove |
+| `GET` | `/v1/movimentacoes-estoque` | Sim (JWT, qualquer perfil) | Lista movimentações |
+| `GET` | `/v1/movimentacoes-estoque/:id` | Sim (JWT, qualquer perfil) | Detalhe |
+| `POST` | `/v1/movimentacoes-estoque` | Sim (JWT, perfil **ADMIN**) | Cria movimentação ENTRADA/SAIDA |
+| `PUT` | `/v1/movimentacoes-estoque/:id` | Sim (JWT, perfil **ADMIN**) | Atualiza movimentação |
+| `DELETE` | `/v1/movimentacoes-estoque/:id` | Sim (JWT, perfil **ADMIN**) | Remove movimentação |
+| `GET` | `/v1/campanhas` | Sim (JWT, qualquer perfil) | Lista campanhas promocionais (`?ativas=true`, `?unidade_id=`) |
+| `GET` | `/v1/campanhas/:id` | Sim (JWT, qualquer perfil) | Detalhe da campanha |
+| `POST` | `/v1/campanhas` | Sim (JWT, **ADMIN**) | Cria campanha (`percentual_desconto`, vigência, `unidade_id` opcional = rede toda) |
+| `PUT` | `/v1/campanhas/:id` | Sim (JWT, **ADMIN**) | Atualiza campanha |
+| `DELETE` | `/v1/campanhas/:id` | Sim (JWT, **ADMIN**) | Remove campanha |
+| `GET` | `/v1/pedidos` | Sim (JWT) | Lista pedidos: **CLIENTE** só os seus; **COZINHA**/**BALCAO** da `unidade_vinculada_id`; **ADMIN**/**GERENTE** todos (filtros opcionais) |
+| `GET` | `/v1/pedidos/:id` | Sim (JWT) | Detalhe com itens (mesma regra de visão da listagem) |
+| `POST` | `/v1/pedidos` | Sim (JWT) | Cria pedido; opcional `campanha_id` (desconto sobre o total dos itens); `cliente_id` só **ADMIN** |
+| `PUT` | `/v1/pedidos/:id` | Sim (JWT) | Atualiza `status`; **CANCELADO** devolve estoque |
+| `DELETE` | `/v1/pedidos/:id` | Sim (JWT, **ADMIN**) | Remove pedido |
+| `GET` | `/v1/pagamentos` | Sim (JWT) | Lista pagamentos |
+| `GET` | `/v1/pagamentos/:id` | Sim (JWT) | Detalhe |
+| `POST` | `/v1/pagamentos` | Sim (JWT) | Pagamento mock; **APROVADO** acumula pontos de fidelidade (1 ponto por R$ 1 do `valor_total`, se consentimento) |
+| `PUT` | `/v1/pagamentos/:id` | Sim (JWT, perfis operacionais) | Atualiza metadados |
+| `DELETE` | `/v1/pagamentos/:id` | Sim (JWT, **ADMIN**) | Remove pagamento **NEGADO** |
+| `GET` | `/v1/fidelidade` | Sim (JWT) | Lista registros de fidelidade |
+| `GET` | `/v1/fidelidade/:id` | Sim (JWT) | Detalhe |
+| `POST` | `/v1/fidelidade` | Sim (JWT, **ADMIN/GERENTE**) | Cria cadastro |
+| `PUT` | `/v1/fidelidade/:id` | Sim (JWT, **ADMIN/GERENTE**) | Atualiza (`ajuste_pontos_delta`, consentimento) |
+| `DELETE` | `/v1/fidelidade/:id` | Sim (JWT, **ADMIN**) | Remove cadastro |
+| `GET` | `/v1/logs-auditoria` | Sim (JWT, **ADMIN/GERENTE**) | Lista logs com paginação e filtros (`usuario_id`, `acao`, `desde`, `ate`) |
+| `GET` | `/v1/logs-auditoria/:id` | Sim (JWT, **ADMIN/GERENTE**) | Detalhe de um log |
 
-### Login (`POST /auth/login`)
+### Login (`POST /v1/auth/login`)
 
 **Corpo (JSON):**
 
@@ -137,74 +180,75 @@ Lá aparecem os endpoints registrados, esquemas e exemplos de request/response.
 Authorization: Bearer <accessToken>
 ```
 
-**Listar (`GET /usuarios?page=1&limit=10`):** retorno **200** com `{ data, page, limit, total }`. Cada item em `data` contém `id`, `nome`, `email`, `perfil`, `data_nascimento`, `criado_em` (sem `senha_hash`). Ordenação: `criado_em` decrescente.
+**Listar (`GET /v1/usuarios?page=1&limit=10`):** retorno **200** com `{ data, page, limit, total }`. Cada item inclui `unidade_vinculada_id` (pode ser `null`). Ordenação: `criado_em` decrescente.
 
-**Criar (`POST /usuarios`):** corpo com `nome`, `email`, `senha`, `perfil` (`ADMIN`, `GERENTE`, `CLIENTE`, `COZINHA`, `BALCAO`) e opcionalmente `data_nascimento` (formato data ISO). **201** com dados públicos do usuário criado. **409** se o email já existir.
+**Criar (`POST /v1/usuarios`):** corpo com `nome`, `email`, `senha`, `perfil` e opcionalmente `data_nascimento`. Perfis **COZINHA** e **BALCAO** **devem** enviar `unidade_vinculada_id` (UUID de uma unidade existente), para habilitar fila de pedidos e detalhe por unidade.
 
-**Atualizar (`PUT /usuarios/:id`):** `id` na URL deve ser um **UUID válido**. Corpo com um ou mais campos entre `nome`, `email`, `senha`, `perfil`, `data_nascimento`. **404** se não existir; **409** se o novo email já estiver em uso por outro usuário.
+**Atualizar (`PUT /v1/usuarios/:id`):** permite também `unidade_vinculada_id` (ou `null`). Manter **COZINHA**/**BALCAO** sem unidade resulta em **400**.
 
-**Remover (`DELETE /usuarios/:id`):** **204** sem corpo em caso de sucesso; **404** se o usuário não existir. Se o banco tiver restrições de integridade (FK) e o registro estiver vinculado a outras tabelas, a exclusão pode falhar no nível do banco.
+**Remover (`DELETE /v1/usuarios/:id`):** **204** no sucesso.
 
 ### Unidades
 
 Todas as rotas exigem JWT. **GET** (listar e buscar por id) aceita qualquer perfil autenticado. **POST**, **PUT** e **DELETE** exigem perfil **ADMIN**.
 
-**Listar (`GET /unidades?page=1&limit=10&ativa=true`):** **200** com `{ data, page, limit, total }`. Cada item tem `id`, `nome`, `endereco`, `tipo_cozinha`, `ativa`. Ordenação por `nome` ascendente.
+**Listar (`GET /v1/unidades?page=1&limit=10&ativa=true`):** **200** com `{ data, page, limit, total }`. Cada item tem `id`, `nome`, `endereco`, `tipo_cozinha`, `ativa`. Ordenação por `nome` ascendente.
 
-**Detalhe (`GET /unidades/:id`):** **200** com o objeto da unidade; **404** se não existir.
+**Detalhe (`GET /v1/unidades/:id`):** **200** com o objeto da unidade; **404** se não existir.
 
-**Criar (`POST /unidades`):** **201** com a unidade criada.
+**Criar (`POST /v1/unidades`):** **201** com a unidade criada.
 
-**Atualizar (`PUT /unidades/:id`):** envie ao menos um campo entre `nome`, `endereco`, `tipo_cozinha`, `ativa`. **404** se não existir.
+**Atualizar (`PUT /v1/unidades/:id`):** envie ao menos um campo entre `nome`, `endereco`, `tipo_cozinha`, `ativa`. **404** se não existir.
 
-**Remover (`DELETE /unidades/:id`):** **204** sem corpo; **404** se não existir; **409** se ainda houver registros em `pedidos` apontando para essa unidade (regra alinhada ao `ON DELETE RESTRICT` da migration).
+**Remover (`DELETE /v1/unidades/:id`):** **204** sem corpo; **404** se não existir; **409** se ainda houver registros em `pedidos` apontando para essa unidade (regra alinhada ao `ON DELETE RESTRICT` da migration).
 
 ### Produtos
 
 Todas as rotas exigem JWT. **GET** (listar e buscar por id) aceita qualquer perfil autenticado. **POST**, **PUT** e **DELETE** exigem perfil **ADMIN**.
 
-**Listar (`GET /produtos?page=1&limit=10&categoria=Bebidas`):** **200** com `{ data, page, limit, total }`. Cada item tem `id`, `nome`, `descricao` (pode ser `null`), `preco_base` (número), `categoria`. Ordenação por `nome` ascendente.
+**Listar (`GET /v1/produtos?page=1&limit=10&categoria=Bebidas`):** **200** com `{ data, page, limit, total }`. Cada item tem `id`, `nome`, `descricao` (pode ser `null`), `preco_base` (número), `categoria`. Ordenação por `nome` ascendente.
 
-**Detalhe (`GET /produtos/:id`):** **200**; **404** se não existir.
+**Detalhe (`GET /v1/produtos/:id`):** **200**; **404** se não existir.
 
-**Criar (`POST /produtos`):** `preco_base` deve ser maior que zero. **201** com o produto criado.
+**Criar (`POST /v1/produtos`):** `preco_base` deve ser maior que zero. **201** com o produto criado.
 
-**Atualizar (`PUT /produtos/:id`):** envie ao menos um campo. `descricao` pode ser enviada como `null` para limpar. **404** se não existir.
+**Atualizar (`PUT /v1/produtos/:id`):** envie ao menos um campo. `descricao` pode ser enviada como `null` para limpar. **404** se não existir.
 
-**Remover (`DELETE /produtos/:id`):** **204**; **404** se não existir; **409** se existirem linhas em `itens_pedido` ou `movimentacoes_estoque` para esse produto (RESTRICT nas migrations). Registros em `estoque` são removidos em cascata ao excluir o produto.
+**Remover (`DELETE /v1/produtos/:id`):** **204**; **404** se não existir; **409** se existirem linhas em `itens_pedido` ou `movimentacoes_estoque` para esse produto (RESTRICT nas migrations). Registros em `estoque` são removidos em cascata ao excluir o produto.
 
 ### Estoque
 
 Todas as rotas exigem JWT. **GET** (listar e buscar por id) aceita qualquer perfil autenticado. **POST**, **PUT** e **DELETE** exigem perfil **ADMIN**.
 
-**Listar (`GET /estoque?page=1&limit=10&unidade_id=<uuid>&produto_id=<uuid>`):** **200** com `{ data, page, limit, total }`. Cada item tem `id`, `unidade_id`, `produto_id`, `quantidade_atual`, `ponto_reposicao`.
+**Listar (`GET /v1/estoque?page=1&limit=10&unidade_id=<uuid>&produto_id=<uuid>`):** **200** com `{ data, page, limit, total }`. Cada item tem `id`, `unidade_id`, `produto_id`, `quantidade_atual`, `ponto_reposicao`.
 
-**Detalhe (`GET /estoque/:id`):** **200**; **404** se não existir.
+**Detalhe (`GET /v1/estoque/:id`):** **200**; **404** se não existir.
 
-**Criar (`POST /estoque`):** exige `unidade_id` e `produto_id` válidos; `quantidade_atual` e `ponto_reposicao` são inteiros `>= 0` e opcionais (padrão `0`). Retorna **409** se o par `unidade_id + produto_id` já existir.
+**Criar (`POST /v1/estoque`):** exige `unidade_id` e `produto_id` válidos; `quantidade_atual` e `ponto_reposicao` são inteiros `>= 0` e opcionais (padrão `0`). Retorna **409** se o par `unidade_id + produto_id` já existir.
 
-**Atualizar (`PUT /estoque/:id`):** atualiza parcialmente os campos; valida unidade/produto, garante inteiros `>= 0` e retorna **409** em conflito do par único.
+**Atualizar (`PUT /v1/estoque/:id`):** atualiza parcialmente os campos; valida unidade/produto, garante inteiros `>= 0` e retorna **409** em conflito do par único.
 
-**Remover (`DELETE /estoque/:id`):** **204** no sucesso; **404** se não existir.
+**Remover (`DELETE /v1/estoque/:id`):** **204** no sucesso; **404** se não existir.
 
 ### Movimentações de estoque
 
 Todas as rotas exigem JWT. **GET** aceita qualquer perfil autenticado. **POST**, **PUT** e **DELETE** exigem perfil **ADMIN**.
 
 As operações de escrita atualizam `estoque.quantidade_atual` em transação: `ENTRADA` soma, `SAIDA` subtrai (com validação de saldo). Em **PUT** e **DELETE**, o efeito anterior da movimentação é revertido antes de aplicar/remover para manter consistência histórica.
+
 ### Pedidos
 
-Rotas exigem JWT. **Listagem:** perfil **CLIENTE** vê apenas pedidos em que `cliente_id` é o usuário do token; **ADMIN** e **GERENTE** podem listar todos e filtrar por `cliente_id`, `unidade_id`, `canalPedido`, `status`.
+Rotas sob **`/v1/pedidos`**. **Listagem:** **CLIENTE** só pedidos próprios; **ADMIN**/**GERENTE** veem todos (filtros `cliente_id`, `unidade_id`, etc.); **COZINHA**/**BALCAO** veem todos os pedidos da **mesma unidade** indicada em `usuarios.unidade_vinculada_id` (**403** `CONFIG_INCOMPLETA` se a unidade não estiver definida).
 
-**Criar (`POST /pedidos`):** corpo com `unidade_id`, `canalPedido` (`APP` \| `TOTEM` \| `BALCAO` \| `PICKUP` \| `WEB`) e `itens` (`produto_id`, `quantidade`). O pedido inicia em `AGUARDANDO_PAGAMENTO`, calcula `valor_total` a partir de `produtos.preco_base`, grava `preco_unitario_no_momento` nos itens e **baixa o estoque** da unidade. Exige linha em `estoque` para cada produto; **409** `ESTOQUE_INSUFICIENTE` se não houver quantidade. **ADMIN** pode informar `cliente_id` (outro usuário); demais perfis usam o próprio `sub` do JWT.
+**Criar (`POST /v1/pedidos`):** corpo com `unidade_id`, `canalPedido`, `itens`; opcional **`campanha_id`** (campanha ativa, dentro da vigência, aplicável à unidade ou global). O subtotal vem dos preços dos produtos; o **`valor_desconto`** e o **`valor_total`** final são persistidos no cabeçalho do pedido. Itens continuam com `preco_unitario_no_momento` sem desconto por linha (MVP). Baixa de estoque na criação.
 
-**Atualizar status (`PUT /pedidos/:id`):** corpo `{ "status": "..." }`. Transições: `AGUARDANDO_PAGAMENTO` → `EM_PREPARO` \| `CANCELADO`; `EM_PREPARO` → `PRONTO` \| `CANCELADO`; `PRONTO` → `ENTREGUE`. **CANCELADO** devolve quantidades ao estoque. Cancelamento: **CLIENTE** só em `AGUARDANDO_PAGAMENTO`; equipe (**ADMIN**, **GERENTE**, **COZINHA**, **BALCAO**) pode cancelar em `AGUARDANDO_PAGAMENTO` ou `EM_PREPARO`; **ADMIN** pode cancelar nesses estados também.
+**Atualizar status (`PUT /v1/pedidos/:id`):** mesmas transições de status; **COZINHA**/**BALCAO** podem operar pedidos da sua unidade vinculada (não só onde são `cliente_id`).
 
-**Excluir (`DELETE /pedidos/:id`):** somente **ADMIN**; permitido só em `CANCELADO` ou `AGUARDANDO_PAGAMENTO`, sem linha em `pagamentos`. Se excluir em `AGUARDANDO_PAGAMENTO`, o estoque é **restaurado** antes da exclusão.
+**Excluir (`DELETE /v1/pedidos/:id`):** somente **ADMIN**, com as mesmas restrições já documentadas.
 
 ### Pagamentos (mock)
 
-`POST /pagamentos` fecha o fluxo do pedido:
+`POST /v1/pagamentos` fecha o fluxo do pedido:
 - `APROVADO`: pedido vai para `EM_PREPARO`;
 - `NEGADO`: pedido vai para `CANCELADO` e o estoque e restaurado.
 
@@ -226,7 +270,14 @@ Campos principais:
 - `data_consentimento`;
 - `ultima_atualizacao`.
 
-No `PUT /fidelidade/:id`, use `ajuste_pontos_delta` para creditar/debitar pontos sem sobrescrever manualmente o saldo.
+No `PUT /v1/fidelidade/:id`, use `ajuste_pontos_delta` para creditar/debitar pontos sem sobrescrever manualmente o saldo.
+
+**Integração com pedido:** em pagamento mock **`APROVADO`**, se existir registro em `fidelidade` para o `cliente_id` do pedido com `consentimento_explicitado = true`, o sistema **credita automaticamente** pontos iguais à parte inteira do **`valor_total`** do pedido (ex.: R$ 42,70 → 42 pontos).
+
+### LGPD e auditoria
+
+- Consentimento explícito permanece modelado em **fidelidade**; não há, neste escopo, endpoints completos de portabilidade/remoção de titular.
+- O evento de auditoria **`AUTH_LOGIN`** grava em `detalhes` apenas **`usuario_id`** e **`perfil`** (sem email), reduzindo PII em log mantendo rastreabilidade.
 
 ### Rotas protegidas
 
@@ -240,7 +291,7 @@ Senhas no banco usam hash **scrypt** no formato `scrypt$salt$hash` (ver `src/uti
 
 ## Testes
 
-Com `NODE_ENV=test`, o módulo de ambiente carrega `.env.test` (SQLite em `./db/test.db` por padrão). Há testes em `src/app.test.ts` (login e rota de exemplo) e em `test/` conforme evolução do projeto.
+Com `NODE_ENV=test`, o ambiente carrega `.env.test` se existir; use **`.env.test.example`** como modelo (SQLite em `./db/test.db`). Há testes em `src/app.test.ts` e em `test/` (URLs sob `/v1`).
 
 ```bash
 npm test
@@ -260,7 +311,7 @@ src/
   server.ts       # Entrada HTTP e rota raiz
   database.ts     # Configuração Knex e instância `db`
   env/            # Validação de variáveis com Zod
-  routes/         # Rotas da API (auth, usuários, unidades, produtos, estoque, movimentações, pedidos, pagamentos, fidelidade, hello)
+  routes/         # Rotas da API (auth, usuários, unidades, produtos, estoque, movimentações, campanhas, pedidos, pagamentos, fidelidade, logs-auditoria, hello)
   middlewares/    # Ex.: autenticação JWT
   http/           # Contratos de erro da API
   utils/          # Utilitários (senha)
@@ -278,16 +329,14 @@ A organização do código segue ideias alinhadas à **trilha de Node.js da Rock
 
 ## Estado do desenvolvimento
 
-- Autenticação JWT, rota de exemplo (`/hello`) e **gestão de usuários** (listagem e CRUD administrativo, operações de escrita restritas a **ADMIN**).
-- **Unidades da rede**: CRUD em `/unidades` (leitura para qualquer usuário autenticado; escrita só **ADMIN**; exclusão bloqueada com **409** quando há pedidos vinculados).
-- **Produtos do cardápio**: CRUD em `/produtos` (mesmo padrão de permissões; exclusão bloqueada com **409** quando há itens de pedido ou movimentações de estoque vinculados).
-- **Estoque por unidade/produto**: CRUD em `/estoque` (par único `unidade_id + produto_id`; validação de unidade/produto existentes; conflito **409** quando o par já existe).
-- **Movimentações de estoque**: CRUD em `/movimentacoes-estoque` com impacto real no saldo (entrada/saída e reversão em update/delete).
-- **Pedidos**: criação com `canalPedido`, itens, cálculo de total, baixa de estoque; atualização de status com cancelamento e devolução ao estoque; exclusão restrita (**ADMIN**).
-- **Pagamentos mock**: integração com pedidos (`APROVADO` avança para `EM_PREPARO`; `NEGADO` cancela e devolve estoque).
-- **Fidelidade**: cadastro por cliente com saldo de pontos, consentimento LGPD e atualização por delta de pontos.
-- Schema amplo definido em migrations; próximo passo típico: **logs/auditoria**.
-- Documentação interativa em `/documentation` (OpenAPI/Swagger).
+- **Versionamento:** rotas REST sob **`/v1`**; OpenAPI com servidor base `/v1`.
+- **Autenticação** JWT, exemplo **`/v1/hello`** e **usuários** (CRUD **ADMIN**), com **`unidade_vinculada_id`** para **COZINHA**/**BALCAO**.
+- **Unidades**, **produtos**, **estoque**, **movimentações**: CRUD conforme README e migrations.
+- **Campanhas**: CRUD administrativo (**ADMIN**) e listagem/consulta para uso no checkout; desconto percentual aplicado no total do pedido.
+- **Pedidos**: multicanal, estoque, opcional **`campanha_id`**, campos **`valor_desconto`** / **`valor_total`** final; **COZINHA**/**BALCAO** enxergam fila por unidade vinculada.
+- **Pagamentos mock** e **fidelidade** com crédito automático de pontos no **APROVADO** (com consentimento).
+- **Logs de auditoria** persistidos e consulta **`/v1/logs-auditoria`** (**ADMIN**/**GERENTE**); várias mutações já registram eventos.
+- Documentação interativa em **`/documentation`** (Swagger/OpenAPI).
 
 ## Licença
 

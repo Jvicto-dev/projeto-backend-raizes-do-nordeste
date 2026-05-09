@@ -9,6 +9,7 @@ import {
   invalidUnidadeUpdatePayloadError
 } from '../http/errors.js'
 import { authenticate } from '../middlewares/authenticate.js'
+import { isAdminOuGerente } from '../authz/perfis.js'
 import { AcaoAuditoria, getUsuarioIdFromRequest, registrarLogAuditoria } from '../services/audit-log.js'
 
 const errorResponseSchema = {
@@ -32,11 +33,6 @@ const unidadeResponseProps = {
   }
 } as const
 
-function isAdmin(request: { user?: unknown }): boolean {
-  const authUser = request.user as { perfil?: string } | undefined
-  return authUser?.perfil === 'ADMIN'
-}
-
 export async function unidadesRoutes(app: FastifyInstance) {
   app.get(
     '/unidades',
@@ -47,7 +43,7 @@ export async function unidadesRoutes(app: FastifyInstance) {
         tags: ['unidades'],
         summary: 'Listar unidades',
         description:
-          'Lista unidades da rede com paginacao. Opcionalmente filtra por ativa. Requer JWT.',
+          'Lista unidades da rede com paginacao. Opcionalmente filtra por ativa. **Qualquer perfil autenticado.**',
         security: [{ bearerAuth: [] }],
         querystring: {
           type: 'object',
@@ -129,7 +125,7 @@ export async function unidadesRoutes(app: FastifyInstance) {
       schema: {
         tags: ['unidades'],
         summary: 'Buscar unidade por id',
-        description: 'Retorna uma unidade pelo UUID. Requer JWT.',
+        description: 'Retorna uma unidade pelo UUID. **Qualquer perfil autenticado.**',
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',
@@ -186,9 +182,9 @@ export async function unidadesRoutes(app: FastifyInstance) {
       attachValidation: true,
       schema: {
         tags: ['unidades'],
-        summary: 'Criar unidade (somente ADMIN)',
+        summary: 'Criar unidade (ADMIN ou GERENTE)',
         description:
-          'Cadastra uma nova unidade da rede. Requer token JWT com perfil ADMIN.',
+          'Cadastra uma nova unidade da rede. **Perfil ADMIN ou GERENTE.**',
         security: [{ bearerAuth: [] }],
         body: {
           type: 'object',
@@ -213,7 +209,7 @@ export async function unidadesRoutes(app: FastifyInstance) {
         return reply.status(400).send(invalidUnidadeCreationPayloadError())
       }
 
-      if (!isAdmin(request)) {
+      if (!isAdminOuGerente(request)) {
         return reply.status(403).send(forbiddenError())
       }
 
@@ -266,8 +262,8 @@ export async function unidadesRoutes(app: FastifyInstance) {
       attachValidation: true,
       schema: {
         tags: ['unidades'],
-        summary: 'Atualizar unidade (somente ADMIN)',
-        description: 'Atualiza dados de uma unidade. Requer token JWT com perfil ADMIN.',
+        summary: 'Atualizar unidade (ADMIN ou GERENTE)',
+        description: 'Atualiza dados de uma unidade. **Perfil ADMIN ou GERENTE.**',
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',
@@ -304,7 +300,7 @@ export async function unidadesRoutes(app: FastifyInstance) {
         })
       }
 
-      if (!isAdmin(request)) {
+      if (!isAdminOuGerente(request)) {
         return reply.status(403).send(forbiddenError())
       }
 
@@ -371,9 +367,9 @@ export async function unidadesRoutes(app: FastifyInstance) {
       attachValidation: true,
       schema: {
         tags: ['unidades'],
-        summary: 'Remover unidade (somente ADMIN)',
+        summary: 'Remover unidade (ADMIN ou GERENTE)',
         description:
-          'Exclui uma unidade. Nao permitido se existirem pedidos vinculados (RESTRICT). Requer ADMIN.',
+          'Exclui uma unidade. Nao permitido se existirem pedidos vinculados (RESTRICT). **Perfil ADMIN ou GERENTE.**',
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',
@@ -400,7 +396,7 @@ export async function unidadesRoutes(app: FastifyInstance) {
         })
       }
 
-      if (!isAdmin(request)) {
+      if (!isAdminOuGerente(request)) {
         return reply.status(403).send(forbiddenError())
       }
 

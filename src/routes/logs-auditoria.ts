@@ -65,9 +65,9 @@ export async function logsAuditoriaRoutes(app: FastifyInstance) {
       attachValidation: true,
       schema: {
         tags: ['logs-auditoria'],
-        summary: 'Listar logs de auditoria',
+        summary: 'Listar logs de auditoria (ADMIN ou GERENTE)',
         description:
-          'Consulta paginada com filtros. Somente ADMIN ou GERENTE. Nao expoe endpoint de escrita: registros sao criados pelo sistema.',
+          '**Somente ADMIN ou GERENTE.** Consulta paginada com filtros. Sem endpoint de escrita (logs são internos).',
         security: [{ bearerAuth: [] }],
         querystring: {
           type: 'object',
@@ -188,8 +188,8 @@ export async function logsAuditoriaRoutes(app: FastifyInstance) {
       attachValidation: true,
       schema: {
         tags: ['logs-auditoria'],
-        summary: 'Obter log de auditoria por id',
-        description: 'Detalhe de um registro. Somente ADMIN ou GERENTE.',
+        summary: 'Obter log de auditoria por id (ADMIN ou GERENTE)',
+        description: '**Somente ADMIN ou GERENTE.**',
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',

@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify'
 import type { Knex } from 'knex'
 import { z } from 'zod'
 
+import { isAdminOuGerente } from '../authz/perfis.js'
 import { db } from '../database.js'
 import { forbiddenError } from '../http/errors.js'
 import { authenticate } from '../middlewares/authenticate.js'
@@ -49,11 +50,6 @@ const movimentacaoResponseProps = {
     criado_em: { type: 'string', format: 'date-time' }
   }
 } as const
-
-function isAdmin(request: { user?: unknown }): boolean {
-  const authUser = request.user as { perfil?: string } | undefined
-  return authUser?.perfil === 'ADMIN'
-}
 
 async function validarUnidadeProduto(
   trx: Knex.Transaction,
@@ -155,7 +151,7 @@ export async function movimentacoesEstoqueRoutes(app: FastifyInstance) {
         tags: ['movimentacoes-estoque'],
         summary: 'Listar movimentacoes de estoque',
         description:
-          'Lista movimentacoes com paginacao e filtros opcionais por unidade, produto e tipo.',
+          'Lista movimentacoes com paginacao e filtros opcionais por unidade, produto e tipo. **Qualquer perfil autenticado.**',
         security: [{ bearerAuth: [] }],
         querystring: {
           type: 'object',
@@ -244,7 +240,7 @@ export async function movimentacoesEstoqueRoutes(app: FastifyInstance) {
       schema: {
         tags: ['movimentacoes-estoque'],
         summary: 'Buscar movimentacao por id',
-        description: 'Retorna uma movimentacao de estoque pelo UUID.',
+        description: 'Retorna uma movimentacao de estoque pelo UUID. **Qualquer perfil autenticado.**',
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',
@@ -299,9 +295,9 @@ export async function movimentacoesEstoqueRoutes(app: FastifyInstance) {
       attachValidation: true,
       schema: {
         tags: ['movimentacoes-estoque'],
-        summary: 'Criar movimentacao (somente ADMIN)',
+        summary: 'Criar movimentacao (ADMIN ou GERENTE)',
         description:
-          'Cria movimentacao de ENTRADA/SAIDA e atualiza saldo no estoque de forma transacional.',
+          'Cria movimentacao de ENTRADA/SAIDA e atualiza saldo no estoque de forma transacional. **Perfil ADMIN ou GERENTE.**',
         security: [{ bearerAuth: [] }],
         body: {
           type: 'object',
@@ -328,7 +324,7 @@ export async function movimentacoesEstoqueRoutes(app: FastifyInstance) {
       if (request.validationError) {
         return reply.status(400).send(invalidMovimentacaoEstoqueCreationPayloadError())
       }
-      if (!isAdmin(request)) {
+      if (!isAdminOuGerente(request)) {
         return reply.status(403).send(forbiddenError())
       }
 
@@ -407,9 +403,9 @@ export async function movimentacoesEstoqueRoutes(app: FastifyInstance) {
       attachValidation: true,
       schema: {
         tags: ['movimentacoes-estoque'],
-        summary: 'Atualizar movimentacao (somente ADMIN)',
+        summary: 'Atualizar movimentacao (ADMIN ou GERENTE)',
         description:
-          'Atualiza uma movimentacao e recalcula o saldo: reverte o efeito antigo e aplica o novo, dentro de transacao.',
+          'Atualiza uma movimentacao e recalcula o saldo: reverte o efeito antigo e aplica o novo, dentro de transacao. **Perfil ADMIN ou GERENTE.**',
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',
@@ -441,7 +437,7 @@ export async function movimentacoesEstoqueRoutes(app: FastifyInstance) {
       if (request.validationError) {
         return reply.status(400).send(invalidMovimentacaoEstoqueUpdatePayloadError())
       }
-      if (!isAdmin(request)) {
+      if (!isAdminOuGerente(request)) {
         return reply.status(403).send(forbiddenError())
       }
 
@@ -565,9 +561,9 @@ export async function movimentacoesEstoqueRoutes(app: FastifyInstance) {
       attachValidation: true,
       schema: {
         tags: ['movimentacoes-estoque'],
-        summary: 'Remover movimentacao (somente ADMIN)',
+        summary: 'Remover movimentacao (ADMIN ou GERENTE)',
         description:
-          'Exclui uma movimentacao e reverte seu efeito no estoque dentro de transacao.',
+          'Exclui uma movimentacao e reverte seu efeito no estoque dentro de transacao. **Perfil ADMIN ou GERENTE.**',
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',
@@ -588,7 +584,7 @@ export async function movimentacoesEstoqueRoutes(app: FastifyInstance) {
       if (request.validationError) {
         return reply.status(400).send({ error: 'DADOS_INVALIDOS', message: 'O id na URL deve ser um UUID valido.' })
       }
-      if (!isAdmin(request)) {
+      if (!isAdminOuGerente(request)) {
         return reply.status(403).send(forbiddenError())
       }
 

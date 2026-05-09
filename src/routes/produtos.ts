@@ -8,6 +8,7 @@ import {
   invalidProdutoCreationPayloadError,
   invalidProdutoUpdatePayloadError
 } from '../http/errors.js'
+import { isAdminOuGerente } from '../authz/perfis.js'
 import { authenticate } from '../middlewares/authenticate.js'
 import { AcaoAuditoria, getUsuarioIdFromRequest, registrarLogAuditoria } from '../services/audit-log.js'
 
@@ -48,11 +49,6 @@ function serializeProduto(row: {
   }
 }
 
-function isAdmin(request: { user?: unknown }): boolean {
-  const authUser = request.user as { perfil?: string } | undefined
-  return authUser?.perfil === 'ADMIN'
-}
-
 export async function produtosRoutes(app: FastifyInstance) {
   app.get(
     '/produtos',
@@ -63,7 +59,7 @@ export async function produtosRoutes(app: FastifyInstance) {
         tags: ['produtos'],
         summary: 'Listar produtos',
         description:
-          'Lista produtos com paginacao. Opcionalmente filtra por categoria exata. Requer JWT.',
+          'Lista produtos com paginacao. Opcionalmente filtra por categoria exata. **Qualquer perfil autenticado.**',
         security: [{ bearerAuth: [] }],
         querystring: {
           type: 'object',
@@ -148,7 +144,7 @@ export async function produtosRoutes(app: FastifyInstance) {
       schema: {
         tags: ['produtos'],
         summary: 'Buscar produto por id',
-        description: 'Retorna um produto pelo UUID. Requer JWT.',
+        description: 'Retorna um produto pelo UUID. **Qualquer perfil autenticado.**',
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',
@@ -205,9 +201,9 @@ export async function produtosRoutes(app: FastifyInstance) {
       attachValidation: true,
       schema: {
         tags: ['produtos'],
-        summary: 'Criar produto (somente ADMIN)',
+        summary: 'Criar produto (ADMIN ou GERENTE)',
         description:
-          'Cadastra um produto do cardapio. Requer token JWT com perfil ADMIN.',
+          'Cadastra um produto do cardapio. **Perfil ADMIN ou GERENTE.**',
         security: [{ bearerAuth: [] }],
         body: {
           type: 'object',
@@ -232,7 +228,7 @@ export async function produtosRoutes(app: FastifyInstance) {
         return reply.status(400).send(invalidProdutoCreationPayloadError())
       }
 
-      if (!isAdmin(request)) {
+      if (!isAdminOuGerente(request)) {
         return reply.status(403).send(forbiddenError())
       }
 
@@ -288,8 +284,8 @@ export async function produtosRoutes(app: FastifyInstance) {
       attachValidation: true,
       schema: {
         tags: ['produtos'],
-        summary: 'Atualizar produto (somente ADMIN)',
-        description: 'Atualiza dados de um produto. Requer token JWT com perfil ADMIN.',
+        summary: 'Atualizar produto (ADMIN ou GERENTE)',
+        description: 'Atualiza dados de um produto. **Perfil ADMIN ou GERENTE.**',
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',
@@ -326,7 +322,7 @@ export async function produtosRoutes(app: FastifyInstance) {
         })
       }
 
-      if (!isAdmin(request)) {
+      if (!isAdminOuGerente(request)) {
         return reply.status(403).send(forbiddenError())
       }
 
@@ -407,9 +403,9 @@ export async function produtosRoutes(app: FastifyInstance) {
       attachValidation: true,
       schema: {
         tags: ['produtos'],
-        summary: 'Remover produto (somente ADMIN)',
+        summary: 'Remover produto (ADMIN ou GERENTE)',
         description:
-          'Exclui um produto. Bloqueado se houver itens de pedido ou movimentacoes de estoque (RESTRICT). Requer ADMIN.',
+          'Exclui um produto. Bloqueado se houver itens de pedido ou movimentacoes de estoque (RESTRICT). **Perfil ADMIN ou GERENTE.**',
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',
@@ -436,7 +432,7 @@ export async function produtosRoutes(app: FastifyInstance) {
         })
       }
 
-      if (!isAdmin(request)) {
+      if (!isAdminOuGerente(request)) {
         return reply.status(403).send(forbiddenError())
       }
 

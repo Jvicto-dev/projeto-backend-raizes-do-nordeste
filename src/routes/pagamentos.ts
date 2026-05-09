@@ -275,7 +275,7 @@ export async function pagamentosRoutes(app: FastifyInstance) {
         tags: ['pagamentos'],
         summary: 'Registrar pagamento mock',
         description:
-          'Registra pagamento (APROVADO/NEGADO) para pedido em AGUARDANDO_PAGAMENTO. APROVADO muda pedido para EM_PREPARO; NEGADO cancela e devolve estoque.',
+          'Registra pagamento (APROVADO/NEGADO) para pedido em `AGUARDANDO_PAGAMENTO`. Quem pode: **dono do pedido** (cliente) **ou** perfis **ADMIN**, **GERENTE**, **BALCAO**. APROVADO → `EM_PREPARO`; NEGADO → cancela e devolve estoque.',
         security: [{ bearerAuth: [] }],
         body: {
           type: 'object',
@@ -358,6 +358,24 @@ export async function pagamentosRoutes(app: FastifyInstance) {
 
         if (pb.data.resultado_mock === 'APROVADO') {
           await trx('pedidos').where({ id: pb.data.pedido_id }).update({ status: 'EM_PREPARO' })
+          const pedidoPago = await trx('pedidos').where({ id: pb.data.pedido_id }).first()
+          if (pedidoPago) {
+            const clienteId = String((pedidoPago as { cliente_id: string }).cliente_id)
+            const valorPedido = Number((pedidoPago as { valor_total: unknown }).valor_total)
+            const fid = await trx('fidelidade')
+              .where({ cliente_id: clienteId })
+              .where({ consentimento_explicitado: true })
+              .first()
+            if (fid && valorPedido > 0) {
+              const pts = Math.floor(valorPedido)
+              await trx('fidelidade')
+                .where({ id: String((fid as { id: string }).id) })
+                .update({
+                  saldo_pontos: Number((fid as { saldo_pontos: unknown }).saldo_pontos) + pts,
+                  ultima_atualizacao: trx.fn.now()
+                })
+            }
+          }
         } else {
           await trx('pedidos').where({ id: pb.data.pedido_id }).update({ status: 'CANCELADO' })
           await restaurarEstoquePedido(
@@ -398,7 +416,7 @@ export async function pagamentosRoutes(app: FastifyInstance) {
         tags: ['pagamentos'],
         summary: 'Atualizar metadados de pagamento',
         description:
-          'Atualiza campos de integracao (`metodo_pagamento`, `external_id`, `payload_retorno`). Status do pagamento nao e alterado aqui.',
+          'Atualiza `metodo_pagamento`, `external_id`, `payload_retorno` (status do pagamento nao muda aqui). **Somente** perfis **ADMIN**, **GERENTE** ou **BALCAO**.',
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',

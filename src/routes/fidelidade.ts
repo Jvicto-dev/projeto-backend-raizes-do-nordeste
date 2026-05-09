@@ -246,8 +246,8 @@ export async function fidelidadeRoutes(app: FastifyInstance) {
       attachValidation: true,
       schema: {
         tags: ['fidelidade'],
-        summary: 'Criar registro de fidelidade',
-        description: 'Cria o cadastro de fidelidade para um cliente (somente ADMIN/GERENTE).',
+        summary: 'Criar registro de fidelidade (ADMIN ou GERENTE)',
+        description: '**Perfil ADMIN ou GERENTE.** Cria o cadastro de fidelidade para um cliente.',
         security: [{ bearerAuth: [] }],
         body: {
           type: 'object',
@@ -337,9 +337,9 @@ export async function fidelidadeRoutes(app: FastifyInstance) {
       attachValidation: true,
       schema: {
         tags: ['fidelidade'],
-        summary: 'Atualizar fidelidade',
+        summary: 'Atualizar fidelidade (ADMIN ou GERENTE)',
         description:
-          'Atualiza saldo e consentimento. `ajuste_pontos_delta` aplica credito/debito sobre saldo atual.',
+          '**Perfil ADMIN ou GERENTE.** Atualiza saldo e consentimento; `ajuste_pontos_delta` credita/debita pontos.',
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',
@@ -461,7 +461,7 @@ export async function fidelidadeRoutes(app: FastifyInstance) {
       schema: {
         tags: ['fidelidade'],
         summary: 'Remover fidelidade (somente ADMIN)',
-        description: 'Exclusao fisica do registro de fidelidade.',
+        description: '**Somente perfil ADMIN.** Exclusao fisica do registro.',
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',
